@@ -1,0 +1,150 @@
+/* 収集B の見た目。盤面の寸法は js/config.js の BOARD で決め、CSS では色と文字だけを決める。 */
+
+:root {
+  --bg: #f4f1ea;
+  --fg: #222;
+  --muted: #666;
+  --card-bg: #fffdf7;
+  --card-border: #8a7a5a;
+  --accent: #2d6a4f;
+  --danger: #b23a3a;
+  --guide: #ffd166;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+#app { min-height: 100vh; }
+
+.screen { display: none; padding: 32px 40px; max-width: 900px; margin: 0 auto; }
+.screen.active { display: block; }
+
+h1 { font-size: 1.6rem; margin: 0 0 12px; }
+h2 { font-size: 1.2rem; margin: 28px 0 8px; }
+h3 { font-size: 1.05rem; margin: 16px 0 6px; }
+.muted { color: var(--muted); }
+.notice { background: #fff3cd; border: 1px solid #e0c36a; padding: 10px 14px; border-radius: 6px; }
+
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
+
+button {
+  font: inherit;
+  padding: 8px 18px;
+  border: 1px solid #999;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+button:hover { background: #f2f2f2; }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.primary:hover { background: #245a42; }
+
+label { display: block; margin: 8px 0; }
+input[type="number"], input[type="text"], select {
+  font: inherit; padding: 6px 8px; border: 1px solid #aaa; border-radius: 4px; min-width: 200px;
+}
+.operator-form label { display: grid; grid-template-columns: 160px 1fr; align-items: center; gap: 10px; max-width: 520px; }
+
+.instruction { font-size: 1.15rem; max-width: 720px; }
+.instruction p { margin: 10px 0; }
+
+/* 試行の画面。盤面と開始ボタンを入れる stage を、画面の中央に CSS ピクセル固定で置く。 */
+.screen-trial {
+  max-width: none;
+  padding: 0;
+  height: 100vh;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+.screen-trial.active { display: flex; }
+
+.trial-progress {
+  position: fixed; top: 8px; left: 12px;
+  font-size: 12px; color: var(--muted);
+}
+
+.stage { position: relative; }
+.board { position: absolute; left: 0; top: 0; }
+
+.card {
+  position: absolute;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--card-bg);
+  border: 3px solid var(--card-border);
+  border-radius: 6px;
+  font-size: 56px;
+  font-weight: 700;
+  color: #222;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+.card.guide { outline: 6px solid var(--guide); outline-offset: 2px; }
+.card.correct { border-color: var(--accent); background: #e4f3ea; }
+.card.clicked-wrong { border-color: var(--danger); background: #f8e1e1; }
+
+.start-button {
+  position: absolute;
+  font-size: 20px;
+  border-radius: 10px;
+  background: #fff;
+  border: 2px solid #555;
+}
+.start-button:hover { background: #eee; }
+
+.feedback {
+  position: absolute;
+  left: 0; right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  text-align: center;
+  font-size: 48px;
+  font-weight: 700;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.feedback.show { opacity: 1; }
+.feedback.ok { color: var(--accent); }
+.feedback.miss { color: var(--danger); }
+.feedback.timeout { color: var(--muted); font-size: 32px; }
+
+/* アンケート */
+.survey-form fieldset { border: 1px solid #ccc; border-radius: 6px; margin: 12px 0; padding: 8px 16px; }
+.survey-form label { display: inline-block; margin-right: 16px; }
+.indent { margin-left: 24px; }
+
+/* 較正 */
+.cal-section { border: 1px solid #ccc; border-radius: 6px; padding: 8px 16px; margin: 12px 0; }
+.cal-box-wrap { padding: 8px 0; }
+.cal-box { height: 40px; background: #333; border: 1px solid #000; }
+.cal-mouse-area { display: flex; align-items: center; gap: 16px; padding: 8px 0; }
+.cal-mouse-btn { min-width: 100px; }
+.cal-mouse-btn.armed { background: var(--guide); }
+.cal-cpi-area {
+  width: 100%; height: 80px; display: flex; align-items: center; justify-content: center;
+  background: #ddd; border: 1px dashed #777; border-radius: 6px; cursor: crosshair;
+}
+.cal-cpi-area.locked { background: var(--guide); }
+
+/* 版の数字とテストモードの印 */
+.version-label {
+  position: fixed; right: 8px; bottom: 6px;
+  font-size: 11px; color: #999;
+}
+.test-mode-label {
+  position: fixed; left: 8px; bottom: 6px;
+  font-size: 11px; color: #b23a3a; font-weight: 700;
+}

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>まじかるた 収集B</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Firebase の設定。apiKey が空なら Firebase を使わず、この PC への保存だけで動く。 -->
+  <script src="js/firebase-config.js"></script>
+</head>
+<body>
+  <div id="app">
+
+    <!-- 1. 運営者の画面 -->
+    <section id="screen-operator" class="screen">
+      <h1>まじかるた 収集B（PC とマウス）</h1>
+      <p class="muted">運営者の画面です。参加者番号、群、イベント名を入力して開始してください。</p>
+      <form id="operator-form" class="operator-form" autocomplete="off">
+        <label>参加者番号
+          <input id="in-participant" type="number" min="1" step="1" required placeholder="1 以上の整数">
+        </label>
+        <label>群
+          <select id="in-group"></select>
+        </label>
+        <label>イベント名
+          <input id="in-event" type="text" value="nakayama-ws-2026" required>
+        </label>
+        <label>音量（0 から 1）
+          <input id="in-gain" type="number" min="0" max="1" step="0.05" value="0.3">
+        </label>
+        <div class="row">
+          <button type="submit" class="primary" id="btn-start-session">この参加者で開始</button>
+          <button type="button" id="btn-sound-test">音を鳴らして確かめる</button>
+        </div>
+      </form>
+      <p id="resume-notice" class="notice" hidden></p>
+
+      <h2>運営</h2>
+      <div class="row">
+        <button type="button" id="btn-calibration">較正の画面</button>
+        <button type="button" id="btn-export-json">全記録を JSON で書き出す</button>
+        <button type="button" id="btn-export-csv">試行の CSV を書き出す</button>
+        <button type="button" id="btn-export-paths">軌道の CSV を書き出す</button>
+        <button type="button" id="btn-resend">未送信の記録を再送する</button>
+      </div>
+      <p id="operator-status" class="muted"></p>
+      <details>
+        <summary>この PC にある記録の一覧</summary>
+        <div id="session-list"></div>
+      </details>
+    </section>
+
+    <!-- 較正の画面 -->
+    <section id="screen-calibration" class="screen"></section>
+
+    <!-- 2. 参加者への説明と音量の確認 -->
+    <section id="screen-intro" class="screen">
+      <h1>まじかるた</h1>
+      <div class="instruction">
+        <p>画面に、1 から 12 の値が書かれた札が並びます。読み手の代わりに電子音が鳴ります。電子音の回数が、読まれる札の値です。最後の音だけ高い音で、そこで終わりだと分かります。</p>
+        <p>たとえば音が 7 回鳴れば（最後の 7 回目だけ高い音）、7 の札を取ります。</p>
+        <p>各回は、画面の下にある「開始」のボタンをクリックすると始まります。しばらくすると電子音が始まります。</p>
+        <p>まず、音が聞こえることを確かめてください。</p>
+      </div>
+      <div class="row">
+        <button type="button" id="btn-intro-sound" class="primary">音を鳴らす</button>
+        <button type="button" id="btn-intro-next" disabled>音が聞こえたので次へ</button>
+      </div>
+    </section>
+
+    <!-- 教示やブロックの知らせに使う汎用の画面 -->
+    <section id="screen-message" class="screen">
+      <h1 id="message-title"></h1>
+      <div id="message-body" class="instruction"></div>
+      <div class="row"><button type="button" id="btn-message-next" class="primary">次へ</button></div>
+    </section>
+
+    <!-- 試行の画面 -->
+    <section id="screen-trial" class="screen screen-trial">
+      <div id="trial-progress" class="trial-progress"></div>
+      <div id="stage" class="stage"></div>
+    </section>
+
+    <!-- アンケート -->
+    <section id="screen-survey" class="screen">
+      <h1>アンケート</h1>
+      <form id="survey-form" class="survey-form">
+        <fieldset>
+          <legend>競技かるたの経験</legend>
+          <label><input type="radio" name="experience" value="none" required> なし</label>
+          <label><input type="radio" name="experience" value="yes"> あり</label>
+          <div id="experience-detail" class="indent" hidden>
+            <label>年数 <input type="number" name="years" min="0" max="80" step="0.5" placeholder="例: 3"></label>
+            <label>級・段位 <input type="text" name="grade" placeholder="例: C級、二段"></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>年齢の帯</legend>
+          <select name="ageBand" required>
+            <option value="">選んでください</option>
+            <option value="under10">9 歳以下</option>
+            <option value="10s">10 代</option>
+            <option value="20s">20 代</option>
+            <option value="30s">30 代</option>
+            <option value="40s">40 代</option>
+            <option value="50s">50 代</option>
+            <option value="60plus">60 歳以上</option>
+          </select>
+        </fieldset>
+        <fieldset>
+          <legend>利き手</legend>
+          <label><input type="radio" name="handedness" value="right" required> 右</label>
+          <label><input type="radio" name="handedness" value="left"> 左</label>
+          <label><input type="radio" name="handedness" value="both"> 両方</label>
+        </fieldset>
+        <fieldset>
+          <legend>まじかるたを遊んだことがありますか</legend>
+          <label><input type="radio" name="playedMajikaruta" value="yes" required> ある</label>
+          <label><input type="radio" name="playedMajikaruta" value="no"> ない</label>
+        </fieldset>
+        <div class="row"><button type="submit" class="primary">送信して終了</button></div>
+      </form>
+    </section>
+
+    <!-- 終了の画面 -->
+    <section id="screen-done" class="screen">
+      <h1>ご協力ありがとうございました</h1>
+      <div id="done-status" class="instruction"></div>
+      <div class="row">
+        <button type="button" id="btn-done-resend">未送信の記録を再送する</button>
+        <button type="button" id="btn-done-operator" class="primary">運営者の画面へ</button>
+      </div>
+    </section>
+
+  </div>
+
+  <div id="version-label" class="version-label"></div>
+  <div id="test-mode-label" class="test-mode-label" hidden>テストモード</div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
