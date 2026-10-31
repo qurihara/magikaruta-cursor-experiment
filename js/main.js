@@ -20,7 +20,7 @@ import { Board } from "./board.js";
 import { PointerRecorder, buildTrialRecord } from "./recorder.js";
 import {
   saveTrialLocal, sendTrial, sendSession, saveSessionLocal, loadSessionLocal,
-  loadTrialsForSession, loadAllSessions, loadAllTrials, resendUnsent, firebaseEnabled,
+  loadTrialsForSession, loadAllSessions, loadAllTrials, resendUnsent, uploadEnabled, uploadTargetLabel,
   downloadAllJson, downloadTrialsCsv, downloadPathsCsv, loadSettings, saveSettings,
 } from "./storage.js";
 import { mountCalibration, currentCalibration } from "./calibration.js";
@@ -105,10 +105,12 @@ async function refreshOperatorStatus() {
   const sessions = await loadAllSessions();
   const trials = await loadAllTrials();
   const unsent = trials.filter((t) => !t.sent).length;
-  const fb = await firebaseEnabled();
+  const unsentSessions = sessions.filter((s) => !s.sent).length;
+  const enabled = await uploadEnabled();
   $("#operator-status").textContent =
-    `Firebase: ${fb ? "設定あり（送信します）" : "設定なし（この PC への保存だけ）"}。` +
-    `この PC の記録: セッション ${sessions.length} 件、試行 ${trials.length} 件（未送信 ${unsent} 件）。`;
+    `送信先: ${uploadTargetLabel()}。` +
+    `この PC の記録: セッション ${sessions.length} 件、試行 ${trials.length} 件` +
+    (enabled ? `（未送信: 試行 ${unsent} 件、セッション ${unsentSessions} 件）。` : "。");
   const list = $("#session-list");
   if (sessions.length === 0) {
     list.innerHTML = "<p class='muted'>まだ記録はありません。</p>";
@@ -167,8 +169,8 @@ function setupOperatorScreen() {
   $("#btn-resend").addEventListener("click", async () => {
     $("#operator-status").textContent = "再送しています…";
     const r = await resendUnsent({ onProgress: ({ done, total, sent }) => { $("#operator-status").textContent = `再送 ${done}/${total}（成功 ${sent}）`; } });
-    if (r.skipped) $("#operator-status").textContent = "Firebase の設定が無いので再送しません。";
-    else $("#operator-status").textContent = `再送しました: ${r.sent}/${r.attempted} 件。`;
+    if (r.skipped) $("#operator-status").textContent = "送信先が設定されていないので再送しません。";
+    else $("#operator-status").textContent = `再送しました: 試行 ${r.sent}/${r.attempted} 件、セッション ${r.sessionsSent}/${r.sessionsAttempted} 件。`;
     refreshOperatorStatus();
   });
 }
@@ -226,8 +228,10 @@ async function startSession({ participantId, group, eventName }) {
     survey: existing?.survey ?? null,
     finishedAt: existing?.finishedAt ?? null,
     status: "running",
+    sent: false,   // 開始の記録を送るので、送信済みの印を下ろす
   };
   await saveSessionLocal(state.session);
+  // 開始の記録を送る。待たない（回線が無くても参加者を待たせないため）。失敗しても再送のときに一緒に送る。
   sendSession(state.session).catch(() => {});
 
   state.board = state.board || new Board($("#stage"));
@@ -455,9 +459,6 @@ async function runTrial(trial, meta) {
   state.session.completedTrialCount = state.savedDocIds.size;
   state.session.lastTrialDocId = trial.docId;
   await saveSessionLocal(state.session);
-  // Firestore への送信は待たない（回線が遅くても試行の間隔を保つため）。
-  sendTrial(record).catch((e) => console.warn("送信に失敗しました", e));
-  sendSession(state.session).catch(() => {});
   window.__collectionB.lastRecord = record;
 
   // 6. 結果を即座に表示する。
@@ -472,6 +473,12 @@ async function runTrial(trial, meta) {
     board.showFeedback("お手つき", "miss");
     board.markResult(record.click.card, trial.target);
   }
+
+  // 7. 結果を表示したあとで送信を始める。送信（JSON の組み立てと fetch）が試行中の時刻の計測を
+  //    邪魔しないよう、試行の中では行わず、結果の表示から次の試行の開始までの間（約 2.5 秒）に始める。
+  //    送信の完了は待たない。失敗しても IndexedDB に未送信のまま残り、起動時や「再送」で送り直す。
+  //    セッションの行（進捗）は毎試行では送らず、開始とアンケートのあとだけ送る（GAS への要求を 1 試行 1 回に抑える）。
+  setTimeout(() => { sendTrial(record).catch((e) => console.warn("送信に失敗しました", e)); }, 0);
   await sleep(feedbackMs);
   board.hideFeedback();
   board.clearMarks();
@@ -507,8 +514,10 @@ async function runSurvey() {
   state.session.survey = data;
   state.session.finishedAt = new Date().toISOString();
   state.session.status = "finished";
+  state.session.sent = false;   // アンケートと終了の記録を送るので、送信済みの印を下ろす
   await saveSessionLocal(state.session);
-  await sendSession(state.session);
+  // 待たない。終了の画面は IndexedDB の状態を表示し、未送信なら「再送」で送り直せる。
+  sendSession(state.session).catch(() => {});
 }
 
 // ---------- 終了の画面 ----------
@@ -518,12 +527,16 @@ async function showDone() {
   const render = async () => {
     const trials = await loadTrialsForSession(state.session.sessionId);
     const sent = trials.filter((t) => t.sent).length;
-    const fb = await firebaseEnabled();
+    const session = await loadSessionLocal(state.session.sessionId);
+    const sessionSent = Boolean(session?.sent);
+    const enabled = await uploadEnabled();
+    const allSent = sent === trials.length && sessionSent;
     $("#done-status").innerHTML = [
       `<p>参加者番号 ${state.session.participantId}。試行 ${trials.length} 件をこの PC に保存しました。</p>`,
-      fb
-        ? `<p>Firebase への送信: ${sent} / ${trials.length} 件${sent < trials.length ? "（未送信があります。回線がつながってから「再送」を押してください）" : "（すべて送信済み）"}。</p>`
-        : "<p>Firebase の設定が無いので、記録はこの PC にだけあります。運営者の画面から書き出してください。</p>",
+      enabled
+        ? `<p>${uploadTargetLabel()} への送信: 試行 ${sent} / ${trials.length} 件、セッションの記録（アンケートを含む）${sessionSent ? "送信済み" : "未送信"}` +
+          `${allSent ? "（すべて送信済み）" : "（未送信があります。回線がつながってから「再送」を押してください）"}。</p>`
+        : "<p>送信先が設定されていないので、記録はこの PC にだけあります。運営者の画面から書き出してください。</p>",
     ].join("");
   };
   await render();
@@ -548,8 +561,8 @@ function init() {
   setupOperatorScreen();
   showScreen("screen-operator");
   refreshOperatorStatus();
-  // 設定があれば、起動時に Firebase を初期化し、未送信の記録を再送する。
-  firebaseEnabled().then((ok) => { if (ok) resendUnsent().then(refreshOperatorStatus); });
+  // 送信先が有効なら、起動時に未送信の記録を再送する。
+  uploadEnabled().then((ok) => { if (ok) resendUnsent().then(refreshOperatorStatus); });
   // 試行中に右クリックのメニューが出ないようにする。
   $("#screen-trial").addEventListener("contextmenu", (ev) => ev.preventDefault());
 }

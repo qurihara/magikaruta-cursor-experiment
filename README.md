@@ -4,8 +4,10 @@
 仕様の正本は、同じ案件フォルダにある `collection-b-app-spec.md`（2026-10-30 版）です。
 実験計画の正本は cosense（kuri-lab-Maruyama）の「2026/12月まじかるた中山ワークショップ向け実験計画」にあります。
 
-依存するパッケージは無く、ビルド工程もありません。Firebase の SDK は CDN の ES モジュールから読み込みます。
-版の数字は `js/config.js` の `APP_VERSION` の 1 か所で管理し、画面の右下に出します。直したら必ず上げてください。
+依存するパッケージは無く、ビルド工程もありません。
+記録は、まずその PC の IndexedDB に保存し、加えて Google Apps Script（GAS）の Web アプリへ送って、
+試行の要約を Google スプレッドシートに、カーソルの軌道を Google Drive の JSON ファイルに保存します（下の「記録の送信先（GAS）」）。
+版の数字は `js/config.js` の `APP_VERSION` の 1 か所で管理し、画面の右下に出します。直したら必ず上げ、末尾の「変更履歴」に 1 行書いてください。
 
 ## 動かし方
 
@@ -26,8 +28,8 @@ python3 -m http.server 8765
 テストモードの記録は、セッション ID の末尾に `_test` が付くので、本番の記録と混ざりません。
 テストモードでは、画面の左上の進捗の表示に、読まれる札の値も出します。
 
-Firebase Hosting に置くときは、`firebase.json` の雛形（Hosting の public がリポジトリの根）を使います。
-`.firebaserc` の `default` に Firebase のプロジェクト ID を入れてから `firebase deploy --only hosting` を実行します。
+会場の PC では、このフォルダをそのまま置いてローカルサーバで配信するか、GitHub Pages などの静的な配信に置きます。
+Firebase Hosting に置くこともできます（`firebase.json` の雛形。`.firebaserc` の `default` にプロジェクト ID を入れてから `firebase deploy --only hosting`）。
 
 ## 画面の流れ
 
@@ -55,29 +57,81 @@ Firebase Hosting に置くときは、`firebase.json` の雛形（Hosting の pu
 
 同じ参加者番号で最初からやり直したいときは、別のイベント名を使うか、ブラウザの IndexedDB（`collection-b`）を消してください。
 
-## Firebase の設定の差し込み方
+## 記録の送信先（GAS）
 
-1. Firebase コンソール（https://console.firebase.google.com/）でプロジェクトを作るか、既存のプロジェクトを選びます。
-2. 「構築」→「Authentication」→「Sign-in method」で「匿名」を有効にします。
-3. 「構築」→「Firestore Database」でデータベースを作ります（本番モードで作り、ルールは `firestore.rules` の内容に置き換えます）。
-4. 「プロジェクトの設定」（歯車）→「全般」→「マイアプリ」で Web アプリを追加し、「SDK の設定と構成」で「構成」を選ぶと
-   `firebaseConfig = { apiKey: "...", authDomain: "...", projectId: "...", ... }` が表示されます。
-5. その値を `js/firebase-config.js` の `window.FIREBASE_CONFIG` に貼ります。
-6. `apiKey` と `projectId` が入っていると、アプリは起動時に匿名でサインインし、試行の記録を Firestore に送ります。
-   空のままだと Firebase を読み込まず、この PC の IndexedDB への保存だけで動きます。
+送信先は `js/upload-config.js` の 1 ファイルで決めます。`UPLOAD_TARGET` が `"gas"`（既定）、`"firebase"`、`"none"` のどれかで、
+`GAS_URL` に Apps Script の Web アプリの URL を入れます。`GAS_URL` が空のままだと、アプリは何も送らず、この PC の IndexedDB への保存だけで動きます。
+このリポジトリには、GAS の URL のほかに鍵や認証情報を書きません。
 
-Firestore の構造は次のとおりです（Kikiwake v6 の `firebase/schema.md` の設計原則に準じます）。
+### GAS 側に書かれるもの
+
+| 場所 | 中身 |
+|---|---|
+| スプレッドシートの「trials」シート | 1 試行が 1 行。列は `js/summary.js` の `TRIAL_COLUMNS`（`gas/Code.gs` の同名の配列と同じ並び）。軌道そのものは含まず、点の数と、詳細の JSON のファイル名（`detailFile`）とファイル ID（`detailFileId`）を持つ |
+| スプレッドシートの「sessions」シート | 1 セッションが 1 行。開始、環境、アンケート、終了を、同じ行に上書きする（`sessionId` で行を探す） |
+| Drive の `collection-b-data/{sessionId}/{docId}.json` | 軌道（`path`、`rawPath`）、札と盤面と開始ボタンの矩形（`cardRects`、`boardRect`、`startButtonRect`）、電子音の時刻、クリック。`collection-b-data` はスプレッドシートと同じフォルダに自動で作られる |
+
+二重書き込みは、GAS 側が `rowKey`（`{sessionId}/{docId}`）の列を探して同じ行に上書きすることで防ぎます。
+Drive の JSON も、同じ名前があれば中身を置き換えます。したがって、同じ試行を何度再送しても、行もファイルも増えません。
+同時に届いた書き込みは、スクリプトのロック（待ちは 30 秒まで）で 1 件ずつ処理します。
+
+クライアントは、各試行の結果を表示したあと（次の試行までの間）に 1 試行分を 1 回の POST で送り、応答の `ok` が true のときだけ
+IndexedDB の `sent` の印を立てます。回線が切れていれば印は立たず、起動時、終了の画面、運営者の画面の「未送信の記録を再送する」で送り直します。
+セッションの行は、開始のときとアンケートのあとに送り、未送信なら再送のときに一緒に送ります。
+
+### GAS のデプロイの手順（栗原さんが行う）
+
+1. Google ドライブで、記録を集めるフォルダを決め、その中に新しいスプレッドシートを作ります（名前は、たとえば「collection-b 記録 2026-12」）。
+   このスプレッドシートと同じフォルダに、軌道の JSON を置く `collection-b-data` フォルダが自動で作られます。
+2. そのスプレッドシートのメニューから「拡張機能」→「Apps Script」を開きます。
+3. エディタに最初からある `コード.gs` の中身を消し、このリポジトリの `gas/Code.gs` の中身を貼ります。
+4. 左の歯車「プロジェクトの設定」で「appsscript.json マニフェスト ファイルをエディタで表示する」を入れ、
+   エディタに現れた `appsscript.json` の中身を、このリポジトリの `gas/appsscript.json` の中身に置き換えます（Drive の権限の範囲と、Web アプリの設定が入っています）。
+5. エディタの上の関数の選択で `selfTest` を選んで「実行」を押し、権限の承認の画面で承認します。
+   「trials」と「sessions」のシートに 1 行ずつ、Drive に `collection-b-data/selftest_p0_test/practice_0_1.json` ができていれば、GAS 側は動いています。
+   この確認の行とファイルは、あとで消してかまいません。
+6. 右上の「デプロイ」→「新しいデプロイ」→ 種類の選択で「ウェブアプリ」を選び、
+   「次のユーザーとして実行」を **自分**、「アクセスできるユーザー」を **全員** にして「デプロイ」を押します。
+7. 表示される「ウェブアプリ」の URL（`https://script.google.com/macros/s/…/exec`）を写し、`js/upload-config.js` の `GAS_URL` に貼ります。
+8. コードを直して再デプロイするときは「デプロイ」→「デプロイを管理」→ 鉛筆 → バージョンを「新バージョン」にして「デプロイ」を押します。
+   URL は変わりません（「新しいデプロイ」を作ると URL が変わるので、その場合は `GAS_URL` も直します）。
+
+### 試し送り
+
+デプロイした受け口が生きているかは、ブラウザで `/exec` の URL を開くと `{"ok":true,"app":"collection-b",…}` が出ることで分かります。
+記録の書き込みまで確かめるには、ターミナルから次を送ります（`https://script.google.com/macros/s/…/exec` の部分を実際の URL に置き換えます）。
 
 ```
-sessions/{sessionId}                       ← sessionId = {イベント名}_p{参加者番号}（テストモードは末尾に _test）
-sessions/{sessionId}/trials/{part}_{blockIndex}_{trialIndex}   ← 1 試行の記録（軌道を含む）
+curl -sL -X POST -H 'Content-Type: text/plain;charset=utf-8' \
+  --data '{"type":"trial","summary":{"sessionId":"curl-test_p0_test","docId":"practice_0_1","seq":0,"part":"practice","t":0.4,"target":7,"testMode":true},"detail":{"path":{"x":[0,1],"y":[0,1],"t":[0,8],"src":[0,0]},"rawPath":{"x":[],"y":[],"t":[]}}}' \
+  'https://script.google.com/macros/s/…/exec'
 ```
 
-セッションの文書には、参加者番号、群、イベント名、開始と終了の時刻、環境、アンケート、進捗（completedTrialCount）を置きます。
-このアプリは個人情報を保存しません。文書 ID が決定的なので、同じ試行を 2 回送っても上書きになるだけで、二重に数えられません。
-Firestore のオフライン永続化を有効にしてあり、回線が切れていても送信は待ち行列に残ります。
-加えて、送信が確認できた試行には IndexedDB の側に `sent: true` の印を付け、確認できなかった試行は、
-起動時、終了の画面、運営者の画面の「未送信の記録を再送する」で再送します。
+`{"ok":true,"type":"trial","rowKey":"curl-test_p0_test/practice_0_1","row":…,"replaced":false,"detailFileId":"…"}` が返り、
+「trials」シートに 1 行、Drive に `collection-b-data/curl-test_p0_test/practice_0_1.json` ができます。同じコマンドをもう一度送ると `replaced` が true になり、行は増えません。
+`-L` は GAS の転送（302）を追うために要ります。
+
+アプリからの試し送りは、`GAS_URL` を入れたうえでテストモード（`?test=1`）を開き、参加者番号 1 で数試行を行って、
+「trials」シートの行と Drive の JSON、運営者の画面の「未送信: 試行 0 件」を確かめます。
+テストモードのセッション ID は末尾に `_test` が付くので、本番の行と見分けられます。
+
+### GAS をデプロイする前に手元で確かめる
+
+`tools/dev-receiver.mjs` が、GAS の代わりに POST を受けて中身を印字し、`tools/received/` の下に GAS と同じ構成で保存します。
+
+```
+node tools/dev-receiver.mjs 8797
+```
+
+を起動し、`GAS_URL` を一時的に `http://localhost:8797/` にしてアプリを動かすと、送信の様子を手元で見られます。
+このサーバを止めると送信が失敗して未送信のまま残り、もう一度起動してページを読み込み直すと再送されます。確かめたら `GAS_URL` を戻してください。
+
+### 予備の選択肢: Firebase
+
+`UPLOAD_TARGET` を `"firebase"` にし、`js/firebase-config.js` に Firebase コンソールの `firebaseConfig` の値を貼ると、
+Firestore（`sessions/{sessionId}` と `sessions/{sessionId}/trials/{docId}`、匿名認証、オフライン永続化）へ送ります。
+`js/firebase-init.js`、`firestore.rules`、`firebase.json` はそのために残してあります。GAS が使えない事情が出たときの予備で、
+通常は使いません。
 
 ## 較正の手順（運営者の画面 →「較正の画面」）
 
@@ -103,11 +157,11 @@ Firestore のオフライン永続化を有効にしてあり、回線が切れ�
 - 同じマウスを使う。マウスを替えたら、マウスの較正をやり直す。
 - 参加者番号は 1 から順に付ける（ウィリアムズ方陣の 10 通りの順序を参加者番号で巡回させるため）。
 - テストモードで 1 回通し、運営者の画面から JSON を書き出して中身を確かめる。
-- Firebase を使うなら、`js/firebase-config.js` に設定が入っていること、運営者の画面に「Firebase: 設定あり」と出ることを確かめる。
+- `js/upload-config.js` の `GAS_URL` が入っていること、運営者の画面に「送信先: GAS（スプレッドシートと Drive）」と出ること、テストモードの数試行が「trials」シートに届くことを確かめる。
 
 ## 記録の項目
 
-1 試行の記録（JSON の `trials[]` の各要素、Firestore の `trials/{docId}`）の項目は次のとおりです。
+1 試行の記録（IndexedDB と書き出した JSON の `trials[]` の各要素）の項目は次のとおりです。GAS へは、このうち大きい配列を Drive の JSON に、それ以外を「trials」シートの 1 行に分けて送ります（`js/summary.js`）。
 これらの時刻のうち `startedAt` だけが Date（ISO 8601）で、それ以外の時刻はすべて `performance.now` の時間軸（ページの読み込みからのミリ秒）です。
 
 | 項目 | 内容 |
@@ -136,9 +190,9 @@ Firestore のオフライン永続化を有効にしてあり、回線が切れ�
 | `derived.acquisitionTimeMs` | 取得時間（最後の音からクリックまで）。最後の音より前のクリックでは負の値 |
 | `derived.pathLengthPx`, `derived.straightLinePx` | 軌道の長さと、開始位置からクリックまでの直線距離 |
 | `env` | 環境。`screenWidth`, `screenHeight`, `devicePixelRatio`, `innerWidth`, `innerHeight`, `userAgent`, `platform`, `hasCoalescedEvents`, `hasPointerRawUpdate`, `timeOrigin`, `audioGain`, `calibration` |
-| `sent` | Firestore への送信が確認できたか（IndexedDB と JSON だけ。Firestore には入れない） |
+| `sent` | 送信先への送信が確認できたか（IndexedDB と書き出した JSON だけ。送信先には入れない） |
 
-セッションの記録（JSON の `sessions[]`、Firestore の `sessions/{sessionId}`）には、
+セッションの記録（JSON の `sessions[]`、GAS の「sessions」シートの 1 行）には、
 `sessionId`, `participantId`, `group`, `eventName`, `testMode`, `appVersion`, `startedAt`, `resumedAt`, `resumeCount`,
 `planLength`, `completedTrialCount`, `lastTrialDocId`, `env`, `survey`（`experience`, `years`, `grade`, `ageBand`, `handedness`, `playedMajikaruta`）,
 `finishedAt`, `status` が入ります。
@@ -181,6 +235,8 @@ node --test test/*.test.js
 `test/design.test.js` が、ウィリアムズ方陣、ブロックの順序、読まれる札の割り当て、試行の列の性質を検査します
 （第1部と第3部で 5 水準 × 8 配置が各 1 回ずつ、各ブロックの最大の札がちょうど 2 試行、4 枚の配置で 4 つの値が各 1 回以上、
 同じ参加者番号なら同じ割り当て、参加者番号 1 から 10 で 10 通りの順序、など）。
+`test/summary.test.js` が、1 試行の記録を要約の行と詳細の JSON に分ける純粋関数を検査し、`gas/Code.gs` の列の配列が `js/summary.js` と同じ並びであることも確かめます。
+Node は 18 以上が要ります（`node --test` のため）。
 
 ## ファイルの構成
 
@@ -193,15 +249,25 @@ node --test test/*.test.js
 | `js/audio.js` | Web Audio で電子音を予約し、各音の performance.now 換算の時刻を返す |
 | `js/board.js` | 盤面の描画（CSS ピクセル固定）、札の当たり判定、開始ボタン、結果の表示 |
 | `js/recorder.js` | pointermove（getCoalescedEvents）と pointerrawupdate の記録、1 試行の記録の組み立て、導出の指標 |
-| `js/storage.js` | IndexedDB への保存、Firestore への送信（設定が空ならスキップ）、JSON と CSV の書き出し、較正と設定の保存 |
-| `js/firebase-init.js` | Firebase Auth（匿名）と Firestore の薄いラッパー。設定があるときだけ動的に読み込む |
+| `js/storage.js` | IndexedDB への保存、送信先（GAS、Firebase、なし）の選択と送信、未送信の再送、JSON と CSV の書き出し、較正と設定の保存 |
+| `js/upload-config.js` | 送信先の設定（`UPLOAD_TARGET`、`GAS_URL`）。デプロイのときに書き換えるのはこのファイルだけ |
+| `js/summary.js` | 純粋関数。1 試行の記録を、スプレッドシートの 1 行（要約）と Drive の JSON（詳細）に分ける。列の名前の配列もここにある |
+| `js/gas-client.js` | GAS の Web アプリへ text/plain で JSON を POST し、応答の `ok` を返す |
+| `gas/Code.gs`, `gas/appsscript.json` | GAS 側のコードと設定。スプレッドシートの Apps Script に貼る |
+| `tools/dev-receiver.mjs` | GAS の代わりに手元で POST を受ける確認用のサーバ |
+| `js/firebase-init.js` | Firebase Auth（匿名）と Firestore の薄いラッパー（予備の選択肢）。送信先が firebase で設定があるときだけ動的に読み込む |
 | `js/firebase-config.js` | Firebase の設定の雛形（空） |
 | `js/calibration.js` | 較正の画面 |
 | `js/main.js` | 画面の流れ全体 |
-| `firebase.json`, `.firebaserc`, `firestore.rules` | Firebase Hosting と Firestore の雛形 |
-| `test/design.test.js` | design.js の検査 |
+| `firebase.json`, `.firebaserc`, `firestore.rules` | Firebase Hosting と Firestore の雛形（予備の選択肢） |
+| `test/design.test.js`, `test/summary.test.js` | design.js と summary.js の検査 |
 
 ## デバッグの手がかり
 
 `window.__collectionB` に状態（`state.session`, `state.plan`, `state.current`, `state.lastTones`）と、
 直前の試行の記録（`lastRecord`）を公開しています。ブラウザの開発者ツールから読めます。
+
+## 変更履歴
+
+- v0.2.0（2026-10-31）: 記録の送信先を Firestore から GAS（スプレッドシートと Drive）に切り替えた。要約を 1 試行 1 行で「trials」シートに、軌道を Drive の JSON に保存する。送信先は `js/upload-config.js` で選び、Firebase は予備の選択肢として残した。送信は試行の結果の表示のあとに始める。セッションの記録にも未送信の再送を付けた。
+- v0.1.0（2026-10-30）: 画面の流れ、電子音、盤面、記録、IndexedDB への保存、Firestore への送信、較正を実装した。

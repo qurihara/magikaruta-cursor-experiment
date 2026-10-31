@@ -4,15 +4,23 @@
 // 記録の保存。3つの層からなる。
 // 1. IndexedDB。すべての試行とセッションを、その PC に残す。これが運営中の正本で、
 //    回線が無くても失わない。
-// 2. Firestore。firebase-config.js に設定があるときだけ送る。設定が空ならスキップする。
+// 2. 送信。js/upload-config.js の UPLOAD_TARGET で送信先を選ぶ。
+//    - "gas"      … Google Apps Script の Web アプリ（既定）。要約をスプレッドシートの 1 行に、
+//                   軌道を Drive の JSON に保存する。GAS_URL が空なら送らない。
+//    - "firebase" … Firestore（予備の選択肢）。firebase-config.js に設定があるときだけ送る。
+//    - "none"     … 送らない。
 //    送信が確認できた試行には sent: true の印を付け、未送信の試行はあとで再送する。
+//    セッションの記録にも sent の印を付け、未送信なら再送のときに一緒に送る。
 // 3. 書き出し。IndexedDB にある全記録を JSON と CSV にしてダウンロードする。
 //
-// Firebase の SDK は、設定があるときだけ動的に読み込む。設定が空のときに CDN へ
-// 到達できなくても、アプリが動かなくなることはない。
+// Firebase の SDK は、送信先が "firebase" で設定があるときだけ動的に読み込む。
+// それ以外のときに CDN へ到達できなくても、アプリが動かなくなることはない。
 // ==========================
 
 import { STORAGE } from "./config.js";
+import { UPLOAD_TARGET, GAS_URL, UPLOAD_TIMEOUT_MS } from "./upload-config.js";
+import { postToGas } from "./gas-client.js";
+import { buildTrialPayload, buildSessionPayload } from "./summary.js";
 
 // ---------- IndexedDB ----------
 
@@ -125,6 +133,23 @@ export async function loadSessionLocal(sessionId) {
   return requestToPromise(t.objectStore("sessions").get(sessionId));
 }
 
+// セッションの記録に送信済みの印を付ける。
+export async function markSessionSent(sessionId, sentAt) {
+  const db = await openDb();
+  const t = db.transaction("sessions", "readwrite");
+  const s = t.objectStore("sessions");
+  const row = await requestToPromise(s.get(sessionId));
+  if (row) {
+    row.sent = true;
+    row.sentAt = sentAt;
+    s.put(row);
+  }
+  return new Promise((resolve, reject) => {
+    t.oncomplete = () => resolve(Boolean(row));
+    t.onerror = () => reject(t.error);
+  });
+}
+
 export async function loadAllSessions() {
   const db = await openDb();
   const t = db.transaction("sessions", "readonly");
@@ -133,15 +158,45 @@ export async function loadAllSessions() {
   return rows;
 }
 
-// ---------- Firestore ----------
+// ---------- 送信先の選択 ----------
+
+// いまの送信先。"gas"、"firebase"、"none" のどれか。"gas" でも URL が空なら "none" になる。
+export function uploadTarget() {
+  const t = String(UPLOAD_TARGET || "none").toLowerCase();
+  if (t === "gas") return GAS_URL ? "gas" : "none";
+  if (t === "firebase") return "firebase";
+  return "none";
+}
+
+// 運営者の画面と終了の画面に出す、送信先の説明。
+export function uploadTargetLabel() {
+  const t = uploadTarget();
+  if (t === "gas") return "GAS（スプレッドシートと Drive）";
+  if (t === "firebase") return "Firebase（Firestore）";
+  if (String(UPLOAD_TARGET).toLowerCase() === "gas") return "なし（GAS の URL が空なので、この PC への保存だけ）";
+  return "なし（この PC への保存だけ）";
+}
+
+// 送信先が有効かどうか。Firebase のときは初期化の成否まで見る。
+export async function uploadEnabled() {
+  const t = uploadTarget();
+  if (t === "gas") return true;
+  if (t === "firebase") return Boolean(await getFirebase());
+  return false;
+}
+
+// 古い名前。main.js 以外から呼ばれることは無いが、互換のために残す。
+export const firebaseEnabled = uploadEnabled;
+
+// ---------- Firestore（予備の選択肢） ----------
 
 let fbPromise = null;
 
-// 設定があるときだけ firebase-init.js を読み込む。無ければ null。
+// 送信先が "firebase" で設定があるときだけ firebase-init.js を読み込む。それ以外は null。
 export function getFirebase() {
   if (fbPromise) return fbPromise;
   const cfg = window.FIREBASE_CONFIG || {};
-  if (!cfg.apiKey || !cfg.projectId) {
+  if (uploadTarget() !== "firebase" || !cfg.apiKey || !cfg.projectId) {
     fbPromise = Promise.resolve(null);
   } else {
     fbPromise = import("./firebase-init.js")
@@ -149,10 +204,6 @@ export function getFirebase() {
       .catch((e) => { console.warn("Firebase の初期化に失敗しました。ローカル保存だけで続けます。", e); return null; });
   }
   return fbPromise;
-}
-
-export async function firebaseEnabled() {
-  return Boolean(await getFirebase());
 }
 
 // オフラインのときの setDoc はサーバに届くまで解決しないので、時間を区切る。
@@ -165,33 +216,81 @@ function withTimeout(promise, ms) {
   });
 }
 
-export async function sendTrial(record, { timeoutMs = 8000 } = {}) {
+async function firebaseSendTrial(record, timeoutMs) {
   const fb = await getFirebase();
   if (!fb) return { ok: false, skipped: true };
-  const result = await withTimeout(fb.saveTrial(record.sessionId, record), timeoutMs);
+  return withTimeout(fb.saveTrial(record.sessionId, record), timeoutMs);
+}
+
+async function firebaseSendSession(session, timeoutMs) {
+  const fb = await getFirebase();
+  if (!fb) return { ok: false, skipped: true };
+  const { sent, sentAt, ...data } = session;
+  return withTimeout(fb.upsertSession(session.sessionId, data), timeoutMs);
+}
+
+// ---------- GAS（既定の送信先） ----------
+
+async function gasSendTrial(record, timeoutMs) {
+  const { sent, sentAt, key, sentFlag, ...data } = record;
+  return postToGas(GAS_URL, buildTrialPayload(data), { timeoutMs });
+}
+
+async function gasSendSession(session, timeoutMs) {
+  return postToGas(GAS_URL, buildSessionPayload(session), { timeoutMs });
+}
+
+// ---------- 送信（送信先を問わない入口） ----------
+
+// 1 試行を送る。ok なら IndexedDB に送信済みの印を付ける。返り値は { ok, skipped?, timeout?, error? }。
+export async function sendTrial(record, { timeoutMs = UPLOAD_TIMEOUT_MS } = {}) {
+  const t = uploadTarget();
+  let result;
+  if (t === "gas") result = await gasSendTrial(record, timeoutMs);
+  else if (t === "firebase") result = await firebaseSendTrial(record, timeoutMs);
+  else return { ok: false, skipped: true };
   if (result.ok) await markTrialSent(record.sessionId, record.docId);
   return result;
 }
 
-export async function sendSession(session, { timeoutMs = 8000 } = {}) {
-  const fb = await getFirebase();
-  if (!fb) return { ok: false, skipped: true };
-  return withTimeout(fb.upsertSession(session.sessionId, session), timeoutMs);
+// セッションの記録を送る（開始、環境、アンケート、終了を同じ行に上書きする）。
+// ok なら、渡されたオブジェクトと IndexedDB の両方に sent の印を付ける。
+export async function sendSession(session, { timeoutMs = UPLOAD_TIMEOUT_MS } = {}) {
+  const t = uploadTarget();
+  let result;
+  if (t === "gas") result = await gasSendSession(session, timeoutMs);
+  else if (t === "firebase") result = await firebaseSendSession(session, timeoutMs);
+  else return { ok: false, skipped: true };
+  if (result.ok) {
+    session.sent = true;
+    session.sentAt = new Date().toISOString();
+    await markSessionSent(session.sessionId, session.sentAt);
+  }
+  return result;
 }
 
-// 未送信の試行をまとめて再送する。返り値は { attempted, sent }。
+// 未送信の試行とセッションをまとめて再送する。返り値は { attempted, sent, sessionsAttempted, sessionsSent }。
+// 1 件ずつ順に送る（10 台が同時に送っても GAS 側のロックの待ちが長くならないように、並列にはしない）。
 export async function resendUnsent({ onProgress } = {}) {
-  const fb = await getFirebase();
-  if (!fb) return { attempted: 0, sent: 0, skipped: true };
+  if (!(await uploadEnabled())) return { attempted: 0, sent: 0, sessionsAttempted: 0, sessionsSent: 0, skipped: true };
   const rows = await loadUnsentTrials();
   let sent = 0;
   for (let i = 0; i < rows.length; i++) {
     const { key, sentFlag, ...record } = rows[i];
-    const r = await sendTrial(record, { timeoutMs: 5000 });
+    const r = await sendTrial(record);
     if (r.ok) sent++;
     if (onProgress) onProgress({ done: i + 1, total: rows.length, sent });
+    // 回線が無いときに全件で時間切れを待たないよう、最初の失敗で打ち切る。
+    if (!r.ok && (r.timeout || /Failed to fetch|NetworkError/.test(String(r.error)))) break;
   }
-  return { attempted: rows.length, sent };
+  const sessions = (await loadAllSessions()).filter((s) => !s.sent);
+  let sessionsSent = 0;
+  for (const s of sessions) {
+    const r = await sendSession(s);
+    if (r.ok) sessionsSent++;
+    else break;
+  }
+  return { attempted: rows.length, sent, sessionsAttempted: sessions.length, sessionsSent };
 }
 
 // ---------- 書き出し ----------
