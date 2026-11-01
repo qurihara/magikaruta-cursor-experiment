@@ -28,7 +28,7 @@ export const TRIAL_COLUMNS = [
   // クリック
   "clickX", "clickY", "clickPerf", "clickCard", "correct", "toneCountAtClick", "beforeLastTone",
   "determinedAtClick", "candidatesAtClick", "msFromLastTone", "msFromFirstTone", "msFromStart",
-  "timedOut", "endPerf",
+  "timedOut", "endPerf", "offCardClickCount",
   // 導出の指標
   "movementOnsetPerf", "movementOnsetMsFromFirstTone", "cardAtLastTone", "onCorrectCardAtLastTone",
   "cardAtEachTone", "acquisitionTimeMs", "pathLengthPx", "straightLinePx",
@@ -147,6 +147,7 @@ export function buildTrialSummary(record, { clientSentAt = null } = {}) {
     msFromStart: c ? num(c.msFromStart) : null,
     timedOut: Boolean(record.timedOut),
     endPerf: num(record.endPerf),
+    offCardClickCount: num(record.offCardClickCount ?? 0),
 
     movementOnsetPerf: num(d.movementOnsetPerf),
     movementOnsetMsFromFirstTone: num(d.movementOnsetMsFromFirstTone),
@@ -198,6 +199,7 @@ export function buildTrialDetail(record) {
     toneTimesPerf: record.toneTimesPerf ?? [],
     startClick: record.startClick ?? null,
     click: record.click ?? null,
+    offCardClicks: record.offCardClicks ?? [],
     appVersion: record.appVersion,
   };
   for (const k of DETAIL_KEYS) detail[k] = record[k] ?? null;

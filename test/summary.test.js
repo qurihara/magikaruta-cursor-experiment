@@ -245,3 +245,26 @@ test("gas/Code.gs の TRIAL_COLUMNS と SESSION_COLUMNS は js/summary.js と同
   assert.deepEqual(readGasColumns("TRIAL_COLUMNS"), TRIAL_COLUMNS);
   assert.deepEqual(readGasColumns("SESSION_COLUMNS"), SESSION_COLUMNS);
 });
+
+// 札の外のクリック（2026-11-02 の決定で、お手つきにせず記録だけに残す）が、要約の行と詳細の JSON に入ること。
+test("札の外のクリックの回数が要約の行に、位置と時刻が詳細の JSON に入る", () => {
+  const rec = sampleRecord();
+  rec.offCardClicks = [
+    { x: 10, y: 20, perf: 3000.0, timeStamp: 2999.9, msFromLastTone: -1131.7 },
+    { x: 30, y: 40, perf: 4200.0, timeStamp: 4199.9, msFromLastTone: 68.3 },
+  ];
+  rec.offCardClickCount = 2;
+  const row = buildTrialSummary(rec);
+  assert.equal(row.offCardClickCount, 2);
+  const detail = buildTrialDetail(rec);
+  assert.equal(detail.offCardClicks.length, 2);
+  assert.equal(detail.offCardClicks[1].msFromLastTone, 68.3);
+});
+
+test("札の外のクリックが無い古い記録では、回数を 0 として要約の行に入れる", () => {
+  const rec = sampleRecord();
+  delete rec.offCardClicks;
+  delete rec.offCardClickCount;
+  assert.equal(buildTrialSummary(rec).offCardClickCount, 0);
+  assert.deepEqual(buildTrialDetail(rec).offCardClicks, []);
+});

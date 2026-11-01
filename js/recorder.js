@@ -108,11 +108,12 @@ export function pathLength(path) {
 // session   … { sessionId, participantId, group, eventName, testMode, appVersion }
 // start     … { x, y, perf, timeStamp, isoTime } 開始ボタンのクリック
 // tones     … audio.js の scheduleTones の返り値（toneTimesPerf ほか）と waitMs
-// click     … { x, y, perf, timeStamp, card } または null（打ち切り）
+// click     … { x, y, perf, timeStamp, card } または null（打ち切り）。card は札の値（札のクリックだけで試行が終わる）
+// offCardClicks … 札の外のクリックの並び [{ x, y, perf, timeStamp }]。試行を終わらせず、記録だけに残す
 // recorder  … PointerRecorder（path, rawPath）
 // board     … Board（cardRects, boardRect, startButtonRect, hitTest）
 // env       … 環境の記録
-export function buildTrialRecord({ trial, session, start, tones, waitMs, click, timedOut, recorder, board, env, endPerf }) {
+export function buildTrialRecord({ trial, session, start, tones, waitMs, click, offCardClicks = [], timedOut, recorder, board, env, endPerf }) {
   const values = trial.rows.flat();
   const toneTimes = tones ? tones.toneTimesPerf : [];
   const lastTonePerf = tones ? tones.lastTonePerf : null;
@@ -196,6 +197,14 @@ export function buildTrialRecord({ trial, session, start, tones, waitMs, click, 
 
     // クリック
     click: clickRecord,
+    offCardClicks: offCardClicks.map((o) => ({
+      x: o.x,
+      y: o.y,
+      perf: o.perf,
+      timeStamp: o.timeStamp,
+      msFromLastTone: lastTonePerf === null ? null : o.perf - lastTonePerf,
+    })),
+    offCardClickCount: offCardClicks.length,
     timedOut: !!timedOut,
     endPerf,
 

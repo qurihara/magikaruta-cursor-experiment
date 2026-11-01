@@ -410,7 +410,10 @@ async function runTrial(trial, meta) {
   state.lastTones = tones;
   const clearGuide = trial.part === "part3practice" ? scheduleGuide(trial, tones) : () => {};
 
-  // 4. クリック（pointerdown）または打ち切りを待つ。
+  // 4. 札のクリック（pointerdown）または打ち切りを待つ。
+  //    札の外（札と札のすき間や盤面の外）のクリックは、お手つきにせず試行を続け、位置と時刻だけを残す
+  //    （2026-11-02 に栗原さんが決めた。競技かるたで畳に触れてもお手つきにならないのと同じ扱い）。
+  const offCardClicks = [];
   const result = await new Promise((resolve) => {
     let done = false;
     const finish = (value) => {
@@ -423,8 +426,13 @@ async function runTrial(trial, meta) {
     const onDown = (ev) => {
       if (ev.button !== undefined && ev.button !== 0) return;
       const perf = performance.now();
+      const card = board.hitTest(ev.clientX, ev.clientY);
+      if (card === null) {
+        offCardClicks.push({ x: ev.clientX, y: ev.clientY, perf, timeStamp: ev.timeStamp });
+        return;
+      }
       finish({
-        click: { x: ev.clientX, y: ev.clientY, perf, timeStamp: ev.timeStamp, card: board.hitTest(ev.clientX, ev.clientY) },
+        click: { x: ev.clientX, y: ev.clientY, perf, timeStamp: ev.timeStamp, card },
         timedOut: false,
       });
     };
@@ -448,6 +456,7 @@ async function runTrial(trial, meta) {
     tones,
     waitMs,
     click: result.click,
+    offCardClicks,
     timedOut: result.timedOut,
     recorder,
     board,

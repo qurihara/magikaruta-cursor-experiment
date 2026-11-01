@@ -374,6 +374,7 @@ export const TRIAL_CSV_COLUMNS = [
   ["ms_from_last_tone", (r) => r.click?.msFromLastTone],
   ["ms_from_first_tone", (r) => r.click?.msFromFirstTone],
   ["timed_out", (r) => r.timedOut],
+  ["off_card_click_count", (r) => r.offCardClickCount ?? 0],
   ["movement_onset_perf", (r) => r.derived?.movementOnsetPerf],
   ["movement_onset_ms_from_first_tone", (r) => r.derived?.movementOnsetMsFromFirstTone],
   ["card_at_last_tone", (r) => r.derived?.cardAtLastTone],

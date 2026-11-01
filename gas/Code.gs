@@ -53,7 +53,7 @@ const TRIAL_COLUMNS = [
   "audioBasePerfNow", "audioBaseCtxTime", "audioBaseLatencySec", "audioOutputLatencySec", "audioSampleRate",
   "clickX", "clickY", "clickPerf", "clickCard", "correct", "toneCountAtClick", "beforeLastTone",
   "determinedAtClick", "candidatesAtClick", "msFromLastTone", "msFromFirstTone", "msFromStart",
-  "timedOut", "endPerf",
+  "timedOut", "endPerf", "offCardClickCount",
   "movementOnsetPerf", "movementOnsetMsFromFirstTone", "cardAtLastTone", "onCorrectCardAtLastTone",
   "cardAtEachTone", "acquisitionTimeMs", "pathLengthPx", "straightLinePx",
   "pathPointCount", "rawPathPointCount", "moveEventCount",
