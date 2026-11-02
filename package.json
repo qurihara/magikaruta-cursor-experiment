@@ -1,6 +1,6 @@
 {
   "name": "collection-b-app",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "収集B（PCとマウスのアプリ）。まじかるたの最速囲い手の実験。依存するパッケージは無く、ビルド工程も無い。",
   "type": "module",

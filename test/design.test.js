@@ -233,11 +233,18 @@ test("候補と確定の判定", () => {
   const values = [2, 5, 8, 11];
   assert.deepEqual(candidatesAfterTones(values, 0), [2, 5, 8, 11]);
   assert.deepEqual(candidatesAfterTones(values, 3), [5, 8, 11]);
+  // 5 回目の音が低い音なら、5 の札はその時点で外れる。
+  assert.deepEqual(candidatesAfterTones(values, 5, 8), [8, 11]);
   assert.deepEqual(candidatesAfterTones(values, 9), [11]);
-  // 最大の札 11 が読まれるとき、9 回目の音で確定する（8 を超えた時点）。
-  assert.equal(isDeterminedAfterTones(values, 11, 8), false);
-  assert.equal(isDeterminedAfterTones(values, 11, 9), true);
+  // 最後の高い音のあとは、読まれた札だけが候補である。
+  assert.deepEqual(candidatesAfterTones(values, 8, 8), [8]);
+  // 最大の札 11 が読まれるとき、2 番目の 8 の回数の音（8 回目）が低い音だと分かった時点で確定する。
+  assert.equal(isDeterminedAfterTones(values, 11, 7), false);
+  assert.equal(isDeterminedAfterTones(values, 11, 8), true);
   // 最大でない札 8 が読まれるときは、最後の音（8 回目）まで確定しない。
   assert.equal(isDeterminedAfterTones(values, 8, 7), false);
   assert.equal(isDeterminedAfterTones(values, 8, 8), true);
+  // 場に 5 と 8 しか無く 8 が読まれるとき、5 回目の音が低い音だと分かった時点で確定する。
+  assert.equal(isDeterminedAfterTones([5, 8], 8, 4), false);
+  assert.equal(isDeterminedAfterTones([5, 8], 8, 5), true);
 });

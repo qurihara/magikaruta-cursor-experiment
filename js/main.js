@@ -358,7 +358,7 @@ function scheduleGuide(trial, tones) {
   const values = trial.rows.flat();
   const timers = [];
   const show = (k) => {
-    const cands = candidatesAfterTones(values, k);
+    const cands = candidatesAfterTones(values, k, trial.target);
     state.board.setGuide(cands.length > 0 ? Math.min(...cands) : null);
   };
   show(0);

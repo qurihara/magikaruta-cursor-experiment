@@ -132,7 +132,7 @@ export function buildTrialRecord({ trial, session, start, tones, waitMs, click, 
       toneCountAtClick,                                  // クリックの時点までに鳴った音の数
       beforeLastTone: lastTonePerf === null ? true : click.perf < lastTonePerf,
       determinedAtClick: isDeterminedAfterTones(values, trial.target, toneCountAtClick),
-      candidatesAtClick: candidatesAfterTones(values, toneCountAtClick),
+      candidatesAtClick: candidatesAfterTones(values, toneCountAtClick, trial.target),
       msFromLastTone: lastTonePerf === null ? null : click.perf - lastTonePerf,
       msFromFirstTone: firstTonePerf === null ? null : click.perf - firstTonePerf,
       msFromStart: click.perf - start.perf,

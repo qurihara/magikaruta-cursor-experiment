@@ -359,14 +359,20 @@ export function splitPlanByPart(plan) {
 
 // ---------- 候補の札と確定の判定 ----------
 
-// k 回鳴った時点での候補の札（値が k 以上の札）。
-export function candidatesAfterTones(values, k) {
-  return values.filter((v) => v >= k);
+// k 回鳴った時点での候補の札。
+// k 回目の音が低い音（k < target）なら、値 k の札はその時点で外れるので、値が k より大きい札が候補である。
+// k 回目の音が最後の高い音（k >= target）なら、候補は読まれた札だけである。
+// target を省くと、k 回目までの音がすべて低い音だったとみなす（値が k より大きい札）。
+// 2026-11-02 に直した。それまでは値が k 以上の札を候補としており、音 1 つ分だけ遅れていた。
+export function candidatesAfterTones(values, k, target) {
+  if (target !== undefined && k >= target) return values.filter((v) => v === target);
+  return values.filter((v) => v > k);
 }
 
 // k 回鳴った時点で、読まれる札が確定しているかどうか。
 // 候補が target だけになったとき、または最後の音（k === target）が鳴ったときに確定する。
+// 例：場に 5 と 8 があり 8 が読まれるとき、5 回目の音が低い音だと分かった時点（k = 5）で確定する。
 export function isDeterminedAfterTones(values, target, k) {
   if (k >= target) return true;
-  return candidatesAfterTones(values, k).length === 1;
+  return candidatesAfterTones(values, k, target).length === 1;
 }
