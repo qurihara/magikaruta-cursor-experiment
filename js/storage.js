@@ -200,7 +200,12 @@ export function getFirebase() {
     fbPromise = Promise.resolve(null);
   } else {
     fbPromise = import("./firebase-init.js")
-      .then(async (mod) => { await mod.FB.signInAnon(); return mod.FB; })
+      .then(async (mod) => {
+        // 匿名のログインは、プロジェクトで有効になっていなくても失敗として扱わない。
+        // パイロットのプロジェクトは Firestore の規則でログインを求めず、書き込める場所と形を絞っている（v0.3.0）。
+        try { await mod.FB.signInAnon(); } catch (e) { console.info("匿名のログインを使わずに送ります。", e && e.code); }
+        return mod.FB;
+      })
       .catch((e) => { console.warn("Firebase の初期化に失敗しました。ローカル保存だけで続けます。", e); return null; });
   }
   return fbPromise;

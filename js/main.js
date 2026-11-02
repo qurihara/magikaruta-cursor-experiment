@@ -129,6 +129,13 @@ function setupOperatorScreen() {
   if (settings.eventName) $("#in-event").value = settings.eventName;
   if (settings.gain !== undefined) $("#in-gain").value = String(settings.gain);
   if (settings.lastParticipantId) $("#in-participant").placeholder = `前回は ${settings.lastParticipantId}`;
+  // 参加用の URL（?pid=901&event=pilot-2026-11-02&group=general）で、参加者番号、イベント名、群を埋める。
+  // 研究室のメンバーが自分のブラウザで参加するオンラインのパイロットのため（v0.3.0 で足した）。
+  // 番号を配る側が決めておくと、番号の重なりで記録が上書きされるのを防げる。
+  if (params.get("pid")) $("#in-participant").value = params.get("pid");
+  if (params.get("event")) $("#in-event").value = params.get("event");
+  if (params.get("group") && GROUPS.some((g) => g.value === params.get("group"))) groupSel.value = params.get("group");
+  if (params.get("pid")) checkResume();
 
   $("#in-participant").addEventListener("input", checkResume);
   $("#in-event").addEventListener("input", checkResume);

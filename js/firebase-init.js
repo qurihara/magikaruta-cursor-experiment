@@ -80,7 +80,15 @@ export const FB = {
     if (!enabled) return false;
     const ref = doc(db, "sessions", sessionId, "trials", record.docId);
     const { sent, ...data } = record;
-    await setDoc(ref, { ...data, uid, savedAt: serverTimestamp() });
+    // Firestore の 1 文書は 1MiB まで。細かい軌道（rawPath、pointerrawupdate の点）は毎秒 1000 点を超える端末があり、
+    // 長い試行で上限に近づくので、文書の大きさの見積もりが 700KB を超えたら rawPath だけを省く。
+    // 省いても path（毎秒 100 点以上）は残る。PC の中の IndexedDB には省く前の記録が全部残る（v0.3.0）。
+    const approxBytes = JSON.stringify(data).length;
+    if (approxBytes > 700000 && data.rawPath) {
+      data.rawPathOmitted = { points: data.rawPath.t ? data.rawPath.t.length : null, approxBytes };
+      data.rawPath = null;
+    }
+    await setDoc(ref, { ...data, uid: uid || null, savedAt: serverTimestamp() });
     return true;
   },
 

@@ -1,14 +1,19 @@
 rules_version = '2';
-// 収集B の Firestore のルールの案。匿名認証でサインインした利用者だけが、
-// sessions とその下の trials に書き込める。読み取りは運営者がコンソールか Admin SDK で行うので、
-// クライアントからの読み取りは許さない。
+// 収集B の Firestore の規則（2026-11-02、パイロット用のプロジェクト magikaruta-pilot-2026）。
+// ログイン（匿名認証）は求めない。プロジェクトで認証の機能を初期化していないためである。
+// その代わりに、書き込める場所を sessions/{sessionId} とその下の trials/{trialId} に限り、
+// 文書の中の sessionId が場所の名前と一致することと、文書の数を増やすだけの形（削除は不可）を求める。
+// 読み取りは許さない。記録は、プロジェクトの所有者の権限で取り出す（README の「記録の取り出し」）。
 service cloud.firestore {
   match /databases/{database}/documents {
     match /sessions/{sessionId} {
-      allow create, update: if request.auth != null;
+      allow create, update: if sessionId.size() <= 120
+        && request.resource.data.sessionId == sessionId;
       allow read, delete: if false;
       match /trials/{trialId} {
-        allow create, update: if request.auth != null;
+        allow create, update: if trialId.size() <= 80
+          && request.resource.data.sessionId == sessionId
+          && request.resource.data.docId == trialId;
         allow read, delete: if false;
       }
     }

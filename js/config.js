@@ -7,7 +7,7 @@
 // ==========================
 
 // アプリの版の数字。直したら必ず上げる。画面の右下に出す。
-export const APP_VERSION = "v0.2.3";
+export const APP_VERSION = "v0.3.0";
 
 // 電子音の間隔 t の5水準（秒）。参加者内の要因。
 export const T_LEVELS = [0.1, 0.2, 0.4, 0.8, 1.6];
