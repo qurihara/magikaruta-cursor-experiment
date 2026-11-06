@@ -6,7 +6,7 @@
   <title>まじかるた 収集B</title>
   <link rel="stylesheet" href="style.css">
   <!-- Firebase の設定。送信先は js/upload-config.js で選ぶ（v0.3.0 から既定は Firebase）。?v= は、ブラウザに残った古い設定のファイルを使わせないための版の印で、設定を変えたら上げる。 -->
-  <script src="js/firebase-config.js?v=0.3.0"></script>
+  <script src="js/firebase-config.js?v=0.4.0"></script>
 </head>
 <body>
   <div id="app">
@@ -14,13 +14,16 @@
     <!-- 1. 運営者の画面 -->
     <section id="screen-operator" class="screen">
       <h1>まじかるた 収集B（PC とマウス）</h1>
-      <p class="muted">運営者の画面です。参加者番号、群、イベント名を入力して開始してください。</p>
+      <p class="muted">運営者の画面です。参加者番号、群、機械の名前、イベント名を入力して開始してください。</p>
       <form id="operator-form" class="operator-form" autocomplete="off">
         <label>参加者番号
           <input id="in-participant" type="number" min="1" step="1" required placeholder="1 以上の整数">
         </label>
         <label>群
           <select id="in-group"></select>
+        </label>
+        <label>機械の名前
+          <select id="in-machine"></select>
         </label>
         <label>イベント名
           <input id="in-event" type="text" value="nakayama-ws-2026" required>

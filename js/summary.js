@@ -16,7 +16,7 @@
 // 試行の要約の列。順序はこのままスプレッドシートの左から右になる。
 export const TRIAL_COLUMNS = [
   // 識別
-  "rowKey", "sessionId", "docId", "seq", "participantId", "group", "eventName", "appVersion", "testMode",
+  "rowKey", "sessionId", "docId", "seq", "participantId", "group", "machine", "eventName", "appVersion", "testMode",
   // 試行の設計
   "part", "blockIndex", "blockPos", "trialIndex", "isPractice", "t",
   "layoutId", "layoutName", "layoutRows", "nCards", "maxValue", "target", "isMaxTarget", "toneCount",
@@ -45,7 +45,7 @@ export const TRIAL_COLUMNS = [
 
 // セッションの行の列。開始、環境、アンケート、終了を同じ行に上書きする。
 export const SESSION_COLUMNS = [
-  "sessionId", "participantId", "group", "eventName", "appVersion", "testMode",
+  "sessionId", "participantId", "group", "machine", "eventName", "appVersion", "testMode",
   "startedAt", "resumedAt", "resumeCount", "planLength", "completedTrialCount", "lastTrialDocId",
   "status", "finishedAt",
   // アンケート
@@ -98,6 +98,7 @@ export function buildTrialSummary(record, { clientSentAt = null } = {}) {
     seq: record.seq,
     participantId: record.participantId,
     group: record.group,
+    machine: record.machine ?? "",
     eventName: record.eventName,
     appVersion: record.appVersion,
     testMode: Boolean(record.testMode),
@@ -215,6 +216,7 @@ export function buildSessionRow(session, { clientSentAt = null } = {}) {
     sessionId: session.sessionId,
     participantId: session.participantId,
     group: session.group,
+    machine: session.machine ?? "",
     eventName: session.eventName,
     appVersion: session.appVersion,
     testMode: Boolean(session.testMode),

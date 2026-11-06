@@ -105,7 +105,7 @@ export function pathLength(path) {
 // 1試行の記録を組み立てる。仕様書の第7節の項目と、アプリ内で計算できる導出の指標を入れる。
 //
 // trial     … design.js が作った試行の設計
-// session   … { sessionId, participantId, group, eventName, testMode, appVersion }
+// session   … { sessionId, participantId, group, machine, eventName, testMode, appVersion }
 // start     … { x, y, perf, timeStamp, isoTime } 開始ボタンのクリック
 // tones     … audio.js の scheduleTones の返り値（toneTimesPerf ほか）と waitMs
 // click     … { x, y, perf, timeStamp, card } または null（打ち切り）。card は札の値（札のクリックだけで試行が終わる）
@@ -157,6 +157,7 @@ export function buildTrialRecord({ trial, session, start, tones, waitMs, click, 
     sessionId: session.sessionId,
     participantId: session.participantId,
     group: session.group,
+    machine: session.machine ?? "",
     eventName: session.eventName,
     appVersion: session.appVersion,
     testMode: !!session.testMode,

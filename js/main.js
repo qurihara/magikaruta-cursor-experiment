@@ -12,7 +12,7 @@
 // ==========================
 
 import {
-  APP_VERSION, GROUPS, INSTRUCTIONS, TIMING, TEST_MODE,
+  APP_VERSION, GROUPS, MACHINES, INSTRUCTIONS, TIMING, TEST_MODE,
 } from "./config.js";
 import { buildPlan, splitPlanByPart, PART_ORDER, candidatesAfterTones } from "./design.js";
 import { unlockAudio, setGain, getGain, scheduleTones, stopAllTones, playSoundCheck } from "./audio.js";
@@ -125,7 +125,11 @@ async function refreshOperatorStatus() {
 function setupOperatorScreen() {
   const groupSel = $("#in-group");
   groupSel.innerHTML = GROUPS.map((g) => `<option value="${g.value}">${g.label}</option>`).join("");
+  const machineSel = $("#in-machine");
+  machineSel.innerHTML = MACHINES.map((m) => `<option value="${m.value}">${m.label}</option>`).join("");
   const settings = loadSettings();
+  // 機械の名前は PC ごとに一度選べば、次からはその PC に保存した値が入る（v0.4.0）。
+  if (settings.machine) machineSel.value = settings.machine;
   if (settings.eventName) $("#in-event").value = settings.eventName;
   if (settings.gain !== undefined) $("#in-gain").value = String(settings.gain);
   if (settings.lastParticipantId) $("#in-participant").placeholder = `前回は ${settings.lastParticipantId}`;
@@ -135,6 +139,7 @@ function setupOperatorScreen() {
   if (params.get("pid")) $("#in-participant").value = params.get("pid");
   if (params.get("event")) $("#in-event").value = params.get("event");
   if (params.get("group") && GROUPS.some((g) => g.value === params.get("group"))) groupSel.value = params.get("group");
+  if (params.get("machine") && MACHINES.some((m) => m.value === params.get("machine"))) machineSel.value = params.get("machine");
   if (params.get("pid")) checkResume();
 
   $("#in-participant").addEventListener("input", checkResume);
@@ -153,6 +158,7 @@ function setupOperatorScreen() {
     await startSession({
       participantId: Number($("#in-participant").value),
       group: groupSel.value,
+      machine: machineSel.value,
       eventName: $("#in-event").value,
     });
   });
@@ -204,12 +210,12 @@ function makeSessionId(eventName, pid) {
 
 // ---------- セッションの開始 ----------
 
-async function startSession({ participantId, group, eventName }) {
+async function startSession({ participantId, group, machine = "", eventName }) {
   if (!Number.isInteger(participantId) || participantId < 1) {
     alert("参加者番号は 1 以上の整数にしてください。");
     return;
   }
-  saveSettings({ eventName, gain: Number($("#in-gain").value), lastParticipantId: participantId });
+  saveSettings({ eventName, machine, gain: Number($("#in-gain").value), lastParticipantId: participantId });
 
   const sessionId = makeSessionId(eventName, participantId);
   const plan = buildPlan({ participantId, testMode: TEST });
@@ -223,6 +229,7 @@ async function startSession({ participantId, group, eventName }) {
     sessionId,
     participantId,
     group,
+    machine,
     eventName,
     testMode: TEST,
     appVersion: APP_VERSION,

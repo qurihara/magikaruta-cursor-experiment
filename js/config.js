@@ -7,7 +7,7 @@
 // ==========================
 
 // アプリの版の数字。直したら必ず上げる。画面の右下に出す。
-export const APP_VERSION = "v0.3.0";
+export const APP_VERSION = "v0.4.0";
 
 // 電子音の間隔 t の5水準（秒）。参加者内の要因。
 export const T_LEVELS = [0.1, 0.2, 0.4, 0.8, 1.6];
@@ -99,6 +99,17 @@ export const STORAGE = {
 export const GROUPS = [
   { value: "general", label: "一般" },
   { value: "experienced", label: "競技かるたの経験者" },
+];
+
+// 計測に使う機械の名前（v0.4.0）。会場の PC ごとに運営者の画面で選ぶか、参加用の URL の ?machine= で渡す。
+// A と B は omen1 と同じ型の Windows、C と D は古い Surface。機械の違いを分析で取り除くために記録する。
+export const MACHINES = [
+  { value: "", label: "（選ぶ）" },
+  { value: "A", label: "A" },
+  { value: "B", label: "B" },
+  { value: "C", label: "C" },
+  { value: "D", label: "D" },
+  { value: "other", label: "そのほか" },
 ];
 
 // 教示の文。仕様書の第3節の文をそのまま使う。

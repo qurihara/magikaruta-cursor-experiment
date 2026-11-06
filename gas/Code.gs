@@ -45,7 +45,7 @@ const LOCK_WAIT_MS = 30000;
 
 // 「trials」シートの列。js/summary.js の TRIAL_COLUMNS と同じ並びにする（test/summary.test.js が一致を検査する）。
 const TRIAL_COLUMNS = [
-  "rowKey", "sessionId", "docId", "seq", "participantId", "group", "eventName", "appVersion", "testMode",
+  "rowKey", "sessionId", "docId", "seq", "participantId", "group", "machine", "eventName", "appVersion", "testMode",
   "part", "blockIndex", "blockPos", "trialIndex", "isPractice", "t",
   "layoutId", "layoutName", "layoutRows", "nCards", "maxValue", "target", "isMaxTarget", "toneCount",
   "startedAt", "startX", "startY", "startPerf", "waitMs",
@@ -65,7 +65,7 @@ const TRIAL_COLUMNS = [
 
 // 「sessions」シートの列。js/summary.js の SESSION_COLUMNS と同じ並びにする。
 const SESSION_COLUMNS = [
-  "sessionId", "participantId", "group", "eventName", "appVersion", "testMode",
+  "sessionId", "participantId", "group", "machine", "eventName", "appVersion", "testMode",
   "startedAt", "resumedAt", "resumeCount", "planLength", "completedTrialCount", "lastTrialDocId",
   "status", "finishedAt",
   "surveyExperience", "surveyYears", "surveyGrade", "surveyAgeBand", "surveyHandedness",

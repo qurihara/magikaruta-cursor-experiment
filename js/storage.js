@@ -340,6 +340,7 @@ export const TRIAL_CSV_COLUMNS = [
   ["session_id", (r) => r.sessionId],
   ["participant_id", (r) => r.participantId],
   ["group", (r) => r.group],
+  ["machine", (r) => r.machine ?? ""],
   ["event_name", (r) => r.eventName],
   ["app_version", (r) => r.appVersion],
   ["test_mode", (r) => r.testMode],
