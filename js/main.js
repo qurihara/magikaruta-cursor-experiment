@@ -16,7 +16,7 @@
 // タブの背面とフォーカスの喪失の記録、ポインタの種類の記録、最後の音より前のクリックの印は、両方の流れで記録する。
 //
 // v0.5.1。承認済みの倫理審査の申請「候補縮小課題」（2026-10-27 承認）の説明文書と手続きに、オンラインの流れを合わせた。
-// 同意の画面に参加者説明文書と同意のチェックボックスを置き、印を付けて「同意して開始」を押すまで先へ進めない。
+// 同意の画面に参加者説明文書と同意のチェックボックスを置き、チェックを入れて「同意して開始」を押すまで先へ進めない。
 // 同意の前には何も送信しない（端末の条件で止めた人と二重の参加の人の記録は作らず、Firebase の初期化と再送も同意のあとに行う）。
 // 最後の質問と同意の画面の申告は任意にし、「答えない」を選べるようにした。部と部の間に休憩の画面を置いた。
 // 対面の流れの動きは変えていない。
@@ -672,7 +672,7 @@ async function runTrial(trial, meta) {
 // ---------- アンケート ----------
 
 // オンラインの流れの最後の質問を、承認済みの説明文書の「回答はすべて任意」に合わせる（v0.5.1）。
-// 必須の印を外し、選択式の各問に「答えない」を足し、年齢層の選択肢を研究計画書の別紙の Q1 の区切り（18〜19歳から70代以上）にする。
+// 必須の指定を外し、選択式の各問に「答えない」を足し、年齢層の選択肢を研究計画書の別紙の Q1 の区切り（18〜19歳から70代以上）にする。
 // 対面の流れでは呼ばないので、対面の画面はこれまでどおり。
 function prepareOnlineSurvey(form) {
   if (form.dataset.onlinePrepared) return;
@@ -927,7 +927,7 @@ async function startOnline() {
     const onSubmit = (ev) => {
       ev.preventDefault();
       if (!check()) return;
-      if (!consentBox.checked) return;   // 同意のチェックボックスに印が無ければ先へ進めない（v0.5.1）
+      if (!consentBox.checked) return;   // 同意のチェックボックスにチェックが無ければ先へ進めない（v0.5.1）
       const fd = new FormData(form);
       quizAttempts++;
       const fb = $("#quiz-feedback");
@@ -962,7 +962,7 @@ async function startOnline() {
       audioDevice: answers.audioDevice,
       quizAttempts,
       consentedAt,
-      // 同意の取り方（v0.5.1）。チェックボックスに印を付けて「同意して開始」を押した。
+      // 同意の取り方（v0.5.1）。チェックボックスにチェックを入れて「同意して開始」を押した。
       consent: { method: "checkbox_and_button", checked: true, at: consentedAt },
       envProblemsBeforeConsent,
     },
