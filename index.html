@@ -6,7 +6,7 @@
   <title>まじかるた 収集B</title>
   <link rel="stylesheet" href="style.css">
   <!-- Firebase の設定。送信先は js/upload-config.js で選ぶ（v0.3.0 から既定は Firebase）。?v= は、ブラウザに残った古い設定のファイルを使わせないための版の印で、設定を変えたら上げる。 -->
-  <script src="js/firebase-config.js?v=0.4.0"></script>
+  <script src="js/firebase-config.js?v=0.5.0"></script>
 </head>
 <body>
   <div id="app">
@@ -52,6 +52,55 @@
         <div id="session-list"></div>
       </details>
     </section>
+
+    <!-- オンラインの流れ（URL に ?wid= があるとき、v0.5.0）。1. 参加の確認と端末の確認 -->
+    <section id="screen-online-start" class="screen">
+      <h1>まじかるたの課題（パソコンで約15分）</h1>
+      <div class="instruction">
+        <p>この課題では、電子音の回数で札を取る遊び「まじかるた」を、パソコンの画面の上でマウスを使って行います。かかる時間は約15分です。</p>
+        <p>参加の条件と、記録する情報の扱いは、募集のページ（タスクの説明）に書いたとおりです。内容に同意いただける方だけ、先へ進んでください。途中でやめることもできます。</p>
+      </div>
+      <div id="env-check" class="env-check"></div>
+      <div class="row"><button type="button" id="btn-env-recheck" hidden>もう一度確かめる</button></div>
+
+      <form id="online-env-form" class="survey-form" autocomplete="off">
+        <fieldset>
+          <legend>カーソルを動かすのに使うもの</legend>
+          <label><input type="radio" name="pointerDevice" value="mouse" required> マウス</label>
+          <label><input type="radio" name="pointerDevice" value="touchpad"> タッチパッド（トラックパッド）</label>
+          <label><input type="radio" name="pointerDevice" value="other"> そのほか（トラックボール、ペンなど）</label>
+          <p class="muted">できればマウスをお使いください。</p>
+        </fieldset>
+        <fieldset>
+          <legend>音を聞くのに使うもの</legend>
+          <label><input type="radio" name="audioDevice" value="wired" required> 有線のイヤホンまたはヘッドホン</label>
+          <label><input type="radio" name="audioDevice" value="speaker"> パソコンのスピーカー</label>
+          <label><input type="radio" name="audioDevice" value="bluetooth"> Bluetooth（無線）のイヤホンまたはヘッドホン</label>
+          <label><input type="radio" name="audioDevice" value="other"> そのほか</label>
+          <p class="muted">Bluetooth のイヤホンは音が遅れて届くので、できるだけ有線のイヤホンかパソコンのスピーカーをお使いください。静かな場所で行ってください。</p>
+        </fieldset>
+        <fieldset>
+          <legend>ルールの確認</legend>
+          <p>電子音が 7 回鳴りました（最後の 7 回目だけが高い音）。どの札を取りますか。</p>
+          <label><input type="radio" name="quiz" value="6" required> 6 の札</label>
+          <label><input type="radio" name="quiz" value="7"> 7 の札</label>
+          <label><input type="radio" name="quiz" value="8"> 8 の札</label>
+          <p id="quiz-feedback" class="notice" hidden></p>
+        </fieldset>
+        <div class="row"><button type="submit" class="primary" id="btn-online-start">同意して始める</button></div>
+      </form>
+    </section>
+
+    <!-- オンラインの流れで、先へ進めないときの画面（二重の参加、練習の打ち切りなど） -->
+    <section id="screen-online-stop" class="screen">
+      <h1 id="online-stop-title"></h1>
+      <div id="online-stop-body" class="instruction"></div>
+    </section>
+
+    <!-- タブが背面にあるとき、試行を始めずに待つ画面 -->
+    <div id="hidden-overlay" class="hidden-overlay" hidden>
+      <p>このタブを前面に表示してから、続けてください。</p>
+    </div>
 
     <!-- 較正の画面 -->
     <section id="screen-calibration" class="screen"></section>
@@ -128,6 +177,7 @@
     <!-- 終了の画面 -->
     <section id="screen-done" class="screen">
       <h1>ご協力ありがとうございました</h1>
+      <div id="done-code" class="done-code" hidden></div>
       <div id="done-status" class="instruction"></div>
       <div class="row">
         <button type="button" id="btn-done-resend">未送信の記録を再送する</button>
@@ -140,6 +190,6 @@
   <div id="version-label" class="version-label"></div>
   <div id="test-mode-label" class="test-mode-label" hidden>テストモード</div>
 
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/main.js?v=0.5.0"></script>
 </body>
 </html>

@@ -9,11 +9,19 @@
 // （文書 ID が同じもの）は飛ばすので、途中で中断しても同じ参加者番号で続きから再開できる。
 //
 // 試行中の時刻はすべて performance.now の時間軸で記録し、Date は試行の開始時刻の1回だけにする。
+//
+// オンラインの流れ（v0.5.0）。URL に ?wid=（Yahoo!クラウドソーシングの作業者ID）があると、運営者の画面と較正を飛ばし、
+// 参加の確認と端末の確認の画面から始める。端末の制限、練習の合格条件、完了コードの条件は、オンラインの流れでだけ働く。
+// ?wid= が無いときは、これまでどおりの対面の流れ（12/6 と 12/13 の会場の PC）で動く。
+// タブの背面とフォーカスの喪失の記録、ポインタの種類の記録、最後の音より前のクリックの印は、両方の流れで記録する。
 // ==========================
 
 import {
-  APP_VERSION, GROUPS, MACHINES, INSTRUCTIONS, TIMING, TEST_MODE,
+  APP_VERSION, GROUPS, MACHINES, INSTRUCTIONS, TIMING, TEST_MODE, ONLINE, AUDIO,
 } from "./config.js";
+import {
+  parseWid, participantIdFromWid, envProblems, practiceDecision, completionDecision, duplicateDecision,
+} from "./online.js";
 import { buildPlan, splitPlanByPart, PART_ORDER, candidatesAfterTones } from "./design.js";
 import { unlockAudio, setGain, getGain, scheduleTones, stopAllTones, playSoundCheck } from "./audio.js";
 import { Board } from "./board.js";
@@ -29,6 +37,14 @@ import { mountCalibration, currentCalibration } from "./calibration.js";
 
 const params = new URLSearchParams(location.search);
 const TEST = params.get("test") === "1";
+// オンラインの流れの作業者ID。null なら対面の流れ。
+const WID = parseWid(params);
+const ONLINE_MODE = WID !== null;
+
+// タブの背面とフォーカスの喪失の回数（ページを開いてからの累計）。試行の前後の差で、試行中に起きたかを判定する。
+const focusLog = { hiddenCount: 0, blurCount: 0 };
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") focusLog.hiddenCount++; });
+window.addEventListener("blur", () => { focusLog.blurCount++; });
 
 const state = {
   session: null,      // いまのセッション（参加者）の文書
@@ -43,7 +59,7 @@ const state = {
 };
 
 // デバッグと自動の確認のために、状態と主要な関数を公開する。
-window.__collectionB = { state, TEST, APP_VERSION };
+window.__collectionB = { state, TEST, APP_VERSION, WID, ONLINE_MODE, focusLog };
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -92,10 +108,18 @@ function collectEnv() {
     hasCoalescedEvents: recorder.hasCoalesced,
     hasPointerRawUpdate: recorder.hasRawUpdate,
     timeOrigin: performance.timeOrigin,
+    maxTouchPoints: navigator.maxTouchPoints || 0,
+    uadMobile: navigator.userAgentData ? Boolean(navigator.userAgentData.mobile) : null,
+    // ポインタの種類の手がかり（v0.5.0）。主なポインタが細かい（マウスかタッチパッド）か、ホバーできるか、粗いポインタ（指）が有るか。
+    pointerFine: window.matchMedia ? window.matchMedia("(pointer: fine)").matches : null,
+    hoverHover: window.matchMedia ? window.matchMedia("(hover: hover)").matches : null,
+    anyPointerCoarse: window.matchMedia ? window.matchMedia("(any-pointer: coarse)").matches : null,
+    timeZone: (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || null,
     audioGain: getGain(),
     calibration: currentCalibration(),
     appVersion: APP_VERSION,
     testMode: TEST,
+    mode: ONLINE_MODE ? "online" : "onsite",
   };
 }
 
@@ -210,14 +234,14 @@ function makeSessionId(eventName, pid) {
 
 // ---------- セッションの開始 ----------
 
-async function startSession({ participantId, group, machine = "", eventName }) {
+async function startSession({ participantId, group, machine = "", eventName, online = null, sessionId: givenSessionId = null }) {
   if (!Number.isInteger(participantId) || participantId < 1) {
     alert("参加者番号は 1 以上の整数にしてください。");
     return;
   }
-  saveSettings({ eventName, machine, gain: Number($("#in-gain").value), lastParticipantId: participantId });
+  if (!online) saveSettings({ eventName, machine, gain: Number($("#in-gain").value), lastParticipantId: participantId });
 
-  const sessionId = makeSessionId(eventName, participantId);
+  const sessionId = givenSessionId || makeSessionId(eventName, participantId);
   const plan = buildPlan({ participantId, testMode: TEST });
   const saved = await loadTrialsForSession(sessionId);
   state.savedDocIds = new Set(saved.map((t) => t.docId));
@@ -242,8 +266,21 @@ async function startSession({ participantId, group, machine = "", eventName }) {
     survey: existing?.survey ?? null,
     finishedAt: existing?.finishedAt ?? null,
     status: "running",
+    // オンラインの流れ（v0.5.0）。mode は "online" か "onsite"。online には作業者ID、申告（ポインタ、音の機器）、ルールの確認の回数が入る。
+    mode: online ? "online" : "onsite",
+    wid: online ? online.wid : null,
+    online: online ? { ...(existing?.online || {}), ...online } : null,
+    focus: existing?.focus ?? null,
+    pointerTypes: existing?.pointerTypes ?? {},
     sent: false,   // 開始の記録を送るので、送信済みの印を下ろす
   };
+  // 練習で打ち切った参加者が読み込み直したときは、先へ進めない。
+  if (online && existing?.status === "failed_practice") {
+    state.session.status = "failed_practice";
+    await saveSessionLocal(state.session);
+    showPracticeFailed();
+    return;
+  }
   await saveSessionLocal(state.session);
   // 開始の記録を送る。待たない（回線が無くても参加者を待たせないため）。失敗しても再送のときに一緒に送る。
   sendSession(state.session).catch(() => {});
@@ -254,8 +291,10 @@ async function startSession({ participantId, group, machine = "", eventName }) {
   showScreen("screen-intro");
   $("#btn-intro-next").disabled = true;
   await runIntro();
-  await runAllParts();
+  const passed = await runAllParts();
+  if (!passed) return;   // 練習で打ち切った（オンラインの流れだけ）
   await runSurvey();
+  await finalizeSession();
   await showDone();
 }
 
@@ -287,14 +326,81 @@ const PART_TITLES = {
   part4: "第4部",
 };
 
+// 返り値は、最後の部まで進んだら true、練習で打ち切ったら false。
 async function runAllParts() {
   const parts = splitPlanByPart(state.plan);
   for (const key of PART_ORDER) {
     const remaining = parts.get(key).filter((t) => !state.savedDocIds.has(t.docId));
-    if (remaining.length === 0) continue; // この部は保存済みなので飛ばす
-    await showPartInstruction(key, remaining);
-    await runPart(key, remaining);
+    if (remaining.length > 0) {
+      await showPartInstruction(key, remaining);
+      await runPart(key, remaining);
+    }
+    // オンラインの流れでは、最初の練習のあとに合格条件を確かめる（v0.5.0）。
+    if (key === "practice" && ONLINE_MODE) {
+      const ok = await runPracticeGate(parts.get("practice"));
+      if (!ok) return false;
+    }
   }
+  return true;
+}
+
+// 練習の合格条件（v0.5.0、オンラインの流れだけ）。予定の練習（5回）で正解が ONLINE.practicePassCorrect 回に
+// 届かなければ、届くまで練習を1回ずつ足す。練習の合計が ONLINE.practiceMaxTrials 回に達しても届かなければ
+// 打ち切り、status を failed_practice にして完了コードを出さない。足した練習は、予定の練習を順に繰り返した内容で、
+// 文書 ID は practice_0_6、practice_0_7、… になる（読み込み直しても続きから数える）。
+async function runPracticeGate(planned) {
+  const loadPractice = async () => (await loadTrialsForSession(state.session.sessionId))
+    .filter((r) => r.part === "practice")
+    .sort((a, b) => a.trialIndex - b.trialIndex);
+  let records = await loadPractice();
+  let decision = practiceDecision(records, { planned: planned.length });
+  let announced = false;
+  while (decision === "more") {
+    if (!announced) {
+      await showMessage("練習をもう少し続けます", [
+        `正解が ${ONLINE.practicePassCorrect} 回になると、本番に進みます。`,
+        "電子音の回数を数え、最後の高い音が鳴ったら、その数の札をクリックしてください。",
+      ]);
+      announced = true;
+    }
+    const k = records.length + 1;
+    const base = planned[(k - 1) % planned.length];
+    const trial = { ...base, rows: base.rows.map((r) => r.slice()), docId: `practice_0_${k}`, trialIndex: k, extraPractice: true };
+    await runTrial(trial, { key: "practice", totalBlocks: 1, blockTotal: 1 });
+    records = await loadPractice();
+    decision = practiceDecision(records, { planned: planned.length });
+  }
+  state.session.practice = {
+    trials: records.length,
+    correct: records.filter((r) => r.click && r.click.correct).length,
+    passed: decision === "pass",
+  };
+  if (decision === "fail") {
+    state.session.status = "failed_practice";
+    state.session.finishedAt = new Date().toISOString();
+    state.session.focus = { ...focusLog };
+    state.session.sent = false;
+    await saveSessionLocal(state.session);
+    sendSession(state.session).catch(() => {});
+    rememberDone("failed_practice");
+    showPracticeFailed();
+    return false;
+  }
+  return true;
+}
+
+function showPracticeFailed() {
+  showStop("ここで終了です", [
+    `練習で正解が ${ONLINE.practicePassCorrect} 回に届かなかったため、ここで課題を終了します。完了コードは表示されません。`,
+    "ご協力ありがとうございました。このページを閉じてください。",
+  ]);
+}
+
+// オンラインの流れで、先へ進めないことを知らせる画面。
+function showStop(title, paragraphs) {
+  $("#online-stop-title").textContent = title;
+  $("#online-stop-body").innerHTML = paragraphs.map((p) => `<p>${p}</p>`).join("");
+  showScreen("screen-online-stop");
 }
 
 async function showPartInstruction(key, remaining) {
@@ -363,7 +469,7 @@ async function runPart(key, trials) {
 function progressText(trial, { key, totalBlocks }) {
   const partLabel = PART_TITLES[key] || key;
   const blockLabel = totalBlocks > 1 ? `　まとまり ${trial.blockIndex + 1}/${totalBlocks}` : "";
-  const kind = trial.isPractice ? "練習" : `試行 ${trial.trialIndex}`;
+  const kind = trial.isPractice ? (trial.extraPractice ? `練習 ${trial.trialIndex}` : "練習") : `試行 ${trial.trialIndex}`;
   return `${partLabel}${blockLabel}　${kind}　t = ${trial.t} s　配置 ${trial.layoutId}${TEST ? `　読み ${trial.target}` : ""}`;
 }
 
@@ -393,6 +499,9 @@ async function runTrial(trial, meta) {
   $("#trial-progress").textContent = progressText(trial, meta);
   board.clearMarks();
   board.render(trial.rows);
+
+  // 0. タブが背面にある間は、開始のボタンを出さずに待つ（v0.5.0）。
+  await waitUntilVisible();
   board.showStartButton(true);
 
   // 1. 開始ボタンのクリックを待つ。この位置と時刻が試行の開始になる。
@@ -413,6 +522,8 @@ async function runTrial(trial, meta) {
   };
   board.showStartButton(false);
   board.measure();
+  // 試行の開始の時点の、タブの背面とフォーカスの喪失の累計（v0.5.0）。
+  const focusAtStart = { ...focusLog, hasFocus: document.hasFocus(), visible: document.visibilityState === "visible" };
 
   // 2. 軌道の記録を始め、開始位置を最初の点にする。
   recorder.start();
@@ -447,6 +558,7 @@ async function runTrial(trial, meta) {
       }
       finish({
         click: { x: ev.clientX, y: ev.clientY, perf, timeStamp: ev.timeStamp, card },
+        pointerType: ev.pointerType || null,
         timedOut: false,
       });
     };
@@ -477,6 +589,26 @@ async function runTrial(trial, meta) {
     env: state.session.env,
     endPerf,
   });
+  // v0.5.0 で足した項目。
+  //   pointerTypeStart と pointerTypeClick … 開始のボタンと札のクリックの PointerEvent.pointerType（mouse、pen、touch）。
+  //   earlyClick … 最後の電子音より前に札をクリックした。まじかるたでは囲い手の戦略として正当な行動になりうるので、
+  //                 お手つきにも無効にもせず、印を付けるだけにする（丸山さんの Hick の実験の「早すぎる押下」とは扱いが違う）。
+  //   focus … 試行の間（開始のボタンから結果まで）に、タブが背面になった回数（hiddenDuringTrial）とフォーカスが外れた回数（blurDuringTrial）。
+  record.extraPractice = Boolean(trial.extraPractice);
+  record.pointerTypeStart = startEv.pointerType || null;
+  record.pointerTypeClick = result.pointerType || null;
+  record.earlyClick = Boolean(result.click && record.click && record.click.beforeLastTone);
+  record.focus = {
+    hasFocusAtStart: focusAtStart.hasFocus,
+    visibleAtStart: focusAtStart.visible,
+    hiddenDuringTrial: focusLog.hiddenCount - focusAtStart.hiddenCount,
+    blurDuringTrial: focusLog.blurCount - focusAtStart.blurCount,
+  };
+  record.mode = ONLINE_MODE ? "online" : "onsite";
+  record.wid = WID;
+  for (const pt of [record.pointerTypeStart, record.pointerTypeClick]) {
+    if (pt) state.session.pointerTypes[pt] = (state.session.pointerTypes[pt] || 0) + 1;
+  }
   await saveTrialLocal(record);
   state.savedDocIds.add(trial.docId);
   state.session.completedTrialCount = state.savedDocIds.size;
@@ -536,11 +668,51 @@ async function runSurvey() {
   });
   state.session.survey = data;
   state.session.finishedAt = new Date().toISOString();
-  state.session.status = "finished";
-  state.session.sent = false;   // アンケートと終了の記録を送るので、送信済みの印を下ろす
   await saveSessionLocal(state.session);
+}
+
+// 終了の記録を決めて送る（v0.5.0）。対面の流れでは status を finished にする。
+// オンラインの流れでは、本試行のうち時間切れでない回の割合が ONLINE.minAnsweredRatio 以上なら finished
+// （完了コードを出す）、届かなければ incomplete（完了コードを出さない）にする。
+async function finalizeSession() {
+  const s = state.session;
+  if (ONLINE_MODE) {
+    const records = await loadTrialsForSession(s.sessionId);
+    const d = completionDecision(records);
+    s.status = d.status;
+    s.completion = { answered: d.answered, total: d.total, ratio: d.ratio, minRatio: ONLINE.minAnsweredRatio, codeShown: d.status === "finished" };
+    rememberDone(d.status);
+  } else {
+    s.status = "finished";
+  }
+  if (!s.finishedAt) s.finishedAt = new Date().toISOString();
+  s.focus = { ...focusLog };
+  s.sent = false;   // アンケートと終了の記録を送るので、送信済みの印を下ろす
+  await saveSessionLocal(s);
   // 待たない。終了の画面は IndexedDB の状態を表示し、未送信なら「再送」で送り直せる。
-  sendSession(state.session).catch(() => {});
+  sendSession(s).catch(() => {});
+}
+
+// 同じブラウザで完了したことを残す（オンラインの流れだけ。テストモードでは残さない）。
+function rememberDone(status) {
+  if (!ONLINE_MODE || TEST) return;
+  try {
+    localStorage.setItem(ONLINE.doneKey, JSON.stringify({ wid: WID, status, sessionId: state.session?.sessionId, at: new Date().toISOString() }));
+  } catch (e) { /* localStorage が使えなくても続ける */ }
+}
+
+function loadDone() {
+  try { return JSON.parse(localStorage.getItem(ONLINE.doneKey) || "null"); } catch (e) { return null; }
+}
+
+// タブが前面になるまで待つ。背面の間は、前面に戻すよう求める文を重ねて出す。
+async function waitUntilVisible() {
+  const overlay = $("#hidden-overlay");
+  while (document.visibilityState !== "visible") {
+    overlay.hidden = false;
+    await new Promise((r) => document.addEventListener("visibilitychange", r, { once: true }));
+  }
+  overlay.hidden = true;
 }
 
 // ---------- 終了の画面 ----------
@@ -554,8 +726,18 @@ async function showDone() {
     const sessionSent = Boolean(session?.sent);
     const enabled = await uploadEnabled();
     const allSent = sent === trials.length && sessionSent;
+    const codeBox = $("#done-code");
+    if (ONLINE_MODE) {
+      const st = session?.status;
+      codeBox.hidden = false;
+      codeBox.innerHTML = st === "finished"
+        ? `<p>完了コード</p><p class="code">${ONLINE.completionCode}</p><p>Yahoo!クラウドソーシングの画面に戻り、この 3 桁の数字を入力してください。下の送信の表示が「すべて送信済み」になってから、このページを閉じてください。</p>`
+        : `<p>時間切れの回が多かったため、完了コードは表示されません。</p>`;
+    } else {
+      codeBox.hidden = true;
+    }
     $("#done-status").innerHTML = [
-      `<p>参加者番号 ${state.session.participantId}。試行 ${trials.length} 件をこの PC に保存しました。</p>`,
+      ONLINE_MODE ? `<p>記録 ${trials.length} 件をこのブラウザに保存しました。</p>` : `<p>参加者番号 ${state.session.participantId}。試行 ${trials.length} 件をこの PC に保存しました。</p>`,
       enabled
         ? `<p>${uploadTargetLabel()} への送信: 試行 ${sent} / ${trials.length} 件、セッションの記録（アンケートを含む）${sessionSent ? "送信済み" : "未送信"}` +
           `${allSent ? "（すべて送信済み）" : "（未送信があります。回線がつながってから「再送」を押してください）"}。</p>`
@@ -566,6 +748,19 @@ async function showDone() {
   const resendBtn = $("#btn-done-resend");
   const onResend = async () => { await resendUnsent(); await render(); };
   resendBtn.addEventListener("click", onResend);
+  if (ONLINE_MODE) {
+    // オンラインの流れでは運営者の画面へ戻らない。送信の状況を数秒ごとに表示し直し、未送信が残れば再送する。
+    $("#btn-done-operator").hidden = true;
+    let tries = 0;
+    const timer = setInterval(async () => {
+      tries++;
+      const unsent = (await loadTrialsForSession(state.session.sessionId)).some((t) => !t.sent);
+      if (unsent && tries % 3 === 0) await resendUnsent();
+      await render();
+      if (tries > 60) clearInterval(timer);
+    }, 3000);
+    return;
+  }
   await waitForClick($("#btn-done-operator"));
   resendBtn.removeEventListener("click", onResend);
   state.session = null;
@@ -581,13 +776,144 @@ async function showDone() {
 function init() {
   $("#version-label").textContent = APP_VERSION;
   if (TEST) $("#test-mode-label").hidden = false;
+  // 試行中に右クリックのメニューが出ないようにする。
+  $("#screen-trial").addEventListener("contextmenu", (ev) => ev.preventDefault());
+  if (ONLINE_MODE) {
+    startOnline();
+    uploadEnabled().then((ok) => { if (ok) resendUnsent(); });
+    return;
+  }
   setupOperatorScreen();
   showScreen("screen-operator");
   refreshOperatorStatus();
   // 送信先が有効なら、起動時に未送信の記録を再送する。
   uploadEnabled().then((ok) => { if (ok) resendUnsent().then(refreshOperatorStatus); });
-  // 試行中に右クリックのメニューが出ないようにする。
-  $("#screen-trial").addEventListener("contextmenu", (ev) => ev.preventDefault());
+}
+
+// ---------- オンラインの流れ（v0.5.0） ----------
+
+function onlineEventName() {
+  return params.get("event") || ONLINE.defaultEvent;
+}
+
+function onlineSessionId(suffix = "") {
+  return `${slug(onlineEventName())}_w${WID}${TEST ? "_test" : ""}${suffix}`;
+}
+
+// 本番のセッションとは別の文書に、先へ進めなかった記録（blocked_env、duplicate_browser）を残す。
+async function recordStopped(status, extra = {}) {
+  const doc = {
+    sessionId: onlineSessionId(status === "blocked_env" ? "_blocked" : "_dup"),
+    mode: "online",
+    wid: WID,
+    eventName: onlineEventName(),
+    participantId: participantIdFromWid(WID),
+    status,
+    testMode: TEST,
+    appVersion: APP_VERSION,
+    startedAt: new Date().toISOString(),
+    env: collectEnv(),
+    ...extra,
+    sent: false,
+  };
+  await saveSessionLocal(doc);
+  sendSession(doc).catch(() => {});
+}
+
+async function startOnline() {
+  // 同じブラウザで完了した記録があれば、二重の参加として止めるか、終了の画面を出し直す。
+  const done = TEST ? null : loadDone();
+  const dup = duplicateDecision(done, WID);
+  if (dup === "same") {
+    const session = await loadSessionLocal(done.sessionId || onlineSessionId());
+    if (session) {
+      state.session = session;
+      await showDone();
+      return;
+    }
+    showStop("この課題は終了しています", [
+      done.status === "finished"
+        ? `完了コードは <strong>${ONLINE.completionCode}</strong> です。Yahoo!クラウドソーシングの画面に入力してください。`
+        : "完了コードは表示されません。ご協力ありがとうございました。",
+    ]);
+    return;
+  }
+  if (dup === "other") {
+    await recordStopped("duplicate_browser", { previousWid: done.wid });
+    showStop("すでに参加いただいています", [
+      "このブラウザでは、すでにこの課題に参加いただいています。同じ方の2回目の参加はお受けできません。",
+      "ご協力ありがとうございました。このページを閉じてください。",
+    ]);
+    return;
+  }
+
+  showScreen("screen-online-start");
+  const box = $("#env-check");
+  const form = $("#online-env-form");
+  const startBtn = $("#btn-online-start");
+  const recheckBtn = $("#btn-env-recheck");
+  let blockedRecorded = false;
+  let envOk = false;
+  const check = () => {
+    const env = collectEnv();
+    const r = envProblems(env);
+    envOk = r.problems.length === 0;
+    if (envOk) {
+      box.className = "env-check ok";
+      box.innerHTML = "<p>パソコンからの参加を確認しました。</p>";
+    } else {
+      box.className = "env-check ng";
+      box.innerHTML = r.problems.map((p) => `<p>${p}</p>`).join("");
+      if (!blockedRecorded) {
+        blockedRecorded = true;
+        recordStopped("blocked_env", { envProblems: { mobile: r.mobile, narrow: r.narrow, short: r.short } });
+      }
+    }
+    form.hidden = r.mobile;          // スマートフォンとタブレットは、開き直す以外に解決できない
+    recheckBtn.hidden = envOk || r.mobile;
+    startBtn.disabled = !envOk;
+    return envOk;
+  };
+  check();
+  window.addEventListener("resize", check);
+  recheckBtn.addEventListener("click", check);
+
+  let quizAttempts = 0;
+  const answers = await new Promise((resolve) => {
+    const onSubmit = (ev) => {
+      ev.preventDefault();
+      if (!check()) return;
+      const fd = new FormData(form);
+      quizAttempts++;
+      const fb = $("#quiz-feedback");
+      if (fd.get("quiz") !== "7") {
+        fb.hidden = false;
+        fb.textContent = "違います。音の回数が、取る札の値です。もう一度選んでください。";
+        return;
+      }
+      form.removeEventListener("submit", onSubmit);
+      resolve({ pointerDevice: fd.get("pointerDevice"), audioDevice: fd.get("audioDevice") });
+    };
+    form.addEventListener("submit", onSubmit);
+  });
+  window.removeEventListener("resize", check);
+
+  await unlockAudio();
+  setGain(AUDIO.gain);
+  await startSession({
+    participantId: participantIdFromWid(WID),
+    group: "online",
+    machine: "",
+    eventName: onlineEventName(),
+    sessionId: onlineSessionId(),
+    online: {
+      wid: WID,
+      pointerDevice: answers.pointerDevice,
+      audioDevice: answers.audioDevice,
+      quizAttempts,
+      consentedAt: new Date().toISOString(),
+    },
+  });
 }
 
 init();

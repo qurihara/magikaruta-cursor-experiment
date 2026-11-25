@@ -148,3 +148,16 @@ input[type="number"], input[type="text"], select {
   position: fixed; left: 8px; bottom: 6px;
   font-size: 11px; color: #b23a3a; font-weight: 700;
 }
+
+/* オンラインの流れ（v0.5.0） */
+.env-check { margin: 12px 0; padding: 10px 14px; border-radius: 6px; }
+.env-check.ok { background: #e4f3ea; border: 1px solid #9cc9ae; }
+.env-check.ng { background: #f8e1e1; border: 1px solid #d79a9a; }
+.env-check p { margin: 4px 0; }
+.done-code { margin: 16px 0; padding: 16px 20px; background: #fff; border: 2px solid var(--accent); border-radius: 8px; font-size: 1.15rem; }
+.done-code .code { font-size: 2.4rem; font-weight: 700; letter-spacing: 0.2em; font-family: monospace; }
+.hidden-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 1.5rem; z-index: 100;
+}
+.hidden-overlay[hidden] { display: none; }

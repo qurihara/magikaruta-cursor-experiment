@@ -49,6 +49,33 @@ Firebase Hosting に置くこともできます（`firebase.json` の雛形。`.
 正解か「お手つき」かを即座に表示します。札の外（札と札のすき間や盤面の外）をクリックしても、お手つきにはせず試行を続け、そのクリックの位置と時刻を `offCardClicks` に、回数を `offCardClickCount` に残します（2026-11-02 に決めた。競技かるたで畳に触れてもお手つきにならないのと同じ扱い）。参加者が札をクリックするか、時間切れになった時点で、その試行が終わります。
 最後の音のあと 6 秒たってもクリックが無ければ「時間切れ」として打ち切り、その旨を記録します。
 
+## オンラインの流れ（Yahoo!クラウドソーシング、v0.5.0）
+
+URL に `?wid=`（作業者ID、半角英数 1〜20 文字）を付けて開くと、オンラインの流れになります。
+`?wid=` が無いときは、上の「画面の流れ」のとおり運営者の画面から始める対面の流れで、下の制限と条件は働きません。
+同じ版で、Yahoo の参加者と、12/6 と 12/13 の会場の参加者の両方を測れます。
+
+- 参加用の URL の例: `https://unryu.org/magikaruta-cursor-experiment/?wid=k7m2qx`（試し打ちは `&test=1` を足す）。
+- イベント名の既定は `yahoo-2026-12`（`js/config.js` の `ONLINE.defaultEvent`）で、`?event=` で替えられます。
+- セッション ID は `{イベント名}_w{wid}`（テストモードでは末尾に `_test`）。参加者番号は wid から 10000 から 99999 の値に決まり（`js/online.js` の `participantIdFromWid`）、t のブロックの順序と読まれる札の割り当ての種に使います。同じ wid で開き直すと、続きから再開します。
+- 運営者の画面と定規の較正は飛ばします（`env.calibration` は空になります）。音量は `AUDIO.gain` の 0.3 で始めます。
+
+オンラインの流れの画面の順序は次のとおりです。
+
+1. 参加の確認と端末の確認。スマートフォンとタブレット（iPad が Mac を名乗る場合はタッチ点の数で判定）は先へ進めません。表示の幅が 760px 未満、高さが 660px 未満のときは、ウィンドウを広げるか全画面表示にするよう案内し、広げれば先へ進めます。どちらの場合も、本番とは別の文書（セッション ID の末尾が `_blocked`）に `status: "blocked_env"` を記録します。
+2. 同じ画面で、カーソルを動かすのに使うもの（マウス、タッチパッド、そのほか）と、音を聞くのに使うもの（有線のイヤホン、パソコンのスピーカー、Bluetooth、そのほか）を申告してもらい、Bluetooth を避けるよう案内します。ルールの確認の問い（音が 7 回なら何の札か）に正しく答えるまで先へ進めません（`online.quizAttempts` に回数を残します）。
+3. 音量の確認から第4部まで、対面の流れと同じです。
+4. 練習の合格条件。最初の練習（5 試行）で正解が 2 回に届かなければ、届くまで練習を 1 回ずつ足します（文書 ID は `practice_0_6` から）。練習の合計が 15 回に達しても届かなければ打ち切り、`status: "failed_practice"` を記録して、完了コードを出しません。
+5. アンケートのあと、本試行（練習を除く）のうち時間切れでない回の割合が 0.7 以上なら `status: "finished"` にして完了コード（全員共通の 3 桁、`ONLINE.completionCode`）を表示します。届かなければ `status: "incomplete"` にして、完了コードを出しません。終了の画面は送信の状況を 3 秒ごとに表示し直し、未送信が残れば再送します。
+6. 同じブラウザで完了（または打ち切り）した記録を localStorage（`collectionB.onlineDone`）に残します。同じ wid で開き直すと終了の画面を出し直し、別の wid で開くと二重の参加として止めて、`_dup` の文書に `status: "duplicate_browser"` を記録します。テストモードでは残しません。
+
+両方の流れで記録する項目（v0.5.0）は次のとおりです。
+
+- `earlyClick`: 最後の電子音より前に札をクリックした。まじかるたでは囲い手の戦略として正当な行動になりうるので、お手つきにも無効にもせず、印を付けるだけにします。
+- `pointerTypeStart`、`pointerTypeClick`: 開始のボタンと札のクリックの `PointerEvent.pointerType`。セッションには種類ごとの回数（`pointerTypes`）を残します。
+- `focus`: 試行の間にタブが背面になった回数（`hiddenDuringTrial`）、フォーカスが外れた回数（`blurDuringTrial`）、開始の時点のフォーカスと表示の状態。タブが背面の間は、開始のボタンを出さずに待ちます。セッションには、ページを開いてからの累計（`focus.hiddenCount`、`focus.blurCount`）を残します。
+- `env` に、`maxTouchPoints`、`uadMobile`、`pointerFine`、`hoverHover`、`anyPointerCoarse`、`timeZone`、`mode` を足しました。
+
 ## 中断と再開
 
 試行の記録は、1 試行が終わるたびに IndexedDB に保存されます。文書 ID は `{part}_{blockIndex}_{trialIndex}` で決定的なので、
@@ -258,9 +285,10 @@ Node は 18 以上が要ります（`node --test` のため）。
 | `js/firebase-init.js` | Firebase Auth（匿名）と Firestore の薄いラッパー（予備の選択肢）。送信先が firebase で設定があるときだけ動的に読み込む |
 | `js/firebase-config.js` | Firebase の設定の雛形（空） |
 | `js/calibration.js` | 較正の画面 |
-| `js/main.js` | 画面の流れ全体 |
+| `js/main.js` | 画面の流れ全体（対面の流れとオンラインの流れ） |
+| `js/online.js` | 純粋関数。オンラインの流れの判定（作業者ID、端末、練習の合格条件、完了コードの条件、二重の参加） |
 | `firebase.json`, `.firebaserc`, `firestore.rules` | Firebase Hosting と Firestore の雛形（予備の選択肢） |
-| `test/design.test.js`, `test/summary.test.js` | design.js と summary.js の検査 |
+| `test/design.test.js`, `test/summary.test.js`, `test/online.test.js` | design.js、summary.js、online.js の検査 |
 
 ## デバッグの手がかり
 
@@ -268,6 +296,8 @@ Node は 18 以上が要ります（`node --test` のため）。
 直前の試行の記録（`lastRecord`）を公開しています。ブラウザの開発者ツールから読めます。
 
 ## 変更履歴
+
+- v0.5.0（2026-11-26）: Yahoo!クラウドソーシングで募集するためのオンラインの流れを足した（上の「オンラインの流れ」）。URL の `?wid=` で始め、運営者の画面と較正を飛ばす。スマートフォン、タブレット、狭い画面を弾いて `blocked_env` を記録する。ポインタの種類とマウスかタッチパッドかの申告、音の機器の申告と Bluetooth を避ける案内、ルールの確認の問いを足した。練習の合格条件（正解 2 回、最大 15 回、届かなければ `failed_practice`）と、完了コードの条件（本試行の時間切れでない回の割合が 0.7 以上で `finished`、届かなければ `incomplete`）を足した。同じブラウザで完了した人の再開と二重の参加を止める。両方の流れで、最後の音より前のクリックの印（`earlyClick`）、ポインタの種類、試行中のタブの背面とフォーカスの喪失の回数を記録し、タブが背面の間は試行を始めない。試行の CSV に 8 列（mode、wid、extra_practice、early_click、pointer_type_start、pointer_type_click、hidden_during_trial、blur_during_trial）を足した。対面の流れの動きは変えていない。Firestore の規則は欄を制限していないので変えていない。
 
 - v0.4.0（2026-11-06）: 計測に使う機械の名前（A〜D、そのほか）を記録する欄を足した。運営者の画面で選ぶか、参加用の URL の ?machine=A で渡す。一度選んだ機械の名前は、その PC に保存され、次から自動で入る。機械の名前は、セッションと試行の記録、要約の列（machine）、試行の CSV に入る。会場の PC が機種の違う4台（omen1 と同じ型の Windows 2台と古い Surface 2台）になるので、分析で機械の違いを取り除くためである。
 - v0.3.0（2026-11-02）: 記録の送信先を GAS から Firebase（Firestore）に戻した（丸山さんの経験で GAS の受け口が不安定なため）。プロジェクトは magikaruta-pilot-2026（Firestore は asia-northeast1）。匿名のログインが使えなくても送れるようにし、Firestore の規則はログインを求めない代わりに書き込める場所と形を絞り、読み取りを許さない。1 試行の記録が 700KB を超えそうなときは rawPath だけを省いて送る（PC の中には全部残る）。参加用の URL の ?pid=、?event=、?group= で、参加者番号、イベント名、群を埋められるようにした（研究室のメンバーが自分のブラウザで参加するオンラインのパイロットのため）。firebase-config.js の読み込みに版の印を付けた。firebase-config.js の apiKey は、ページに埋め込む前提の公開の識別子で、秘密の鍵ではない。GitHub の秘密の検出が警告を出したので、Google Cloud の側でこの鍵を使えるサイトを https://unryu.org/* と http://localhost:8796/* に、使える API を Firestore、認証の 2 つ、Firebase のインストールの管理の 4 つに限り、警告は理由を添えて閉じた。
