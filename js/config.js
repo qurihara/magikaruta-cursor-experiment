@@ -7,7 +7,7 @@
 // ==========================
 
 // アプリの版の数字。直したら必ず上げる。画面の右下に出す。
-export const APP_VERSION = "v0.5.2";
+export const APP_VERSION = "v0.5.3";
 
 // 電子音の間隔 t の5水準（秒）。参加者内の要因。
 export const T_LEVELS = [0.1, 0.2, 0.4, 0.8, 1.6];
@@ -145,7 +145,7 @@ export const ONLINE = {
   doneKey: "collectionB.onlineDone",
   // 倫理審査の承認番号（v0.5.1）。同意の画面の説明文の「11．倫理審査」に出す。空のときは番号の括弧を出さない。
   // 結果通知書の PDF から栗原さんが読み取り、掲載文の承認番号と同じ値を入れる（台帳ではまだ未転記）。
-  ethicsApprovalNumber: "",
+  ethicsApprovalNumber: "TN2611",
   // 記録の削除の請求と問い合わせの宛先（v0.5.1）。承認済みの参加者説明文書の「10．研究責任者・連絡先」と同じ。
   contactEmail: "kurihara@tsuda.ac.jp",
   // 部と部の間の休憩の画面（v0.5.1）で知らせる、募集のページの制限時間（分）。掲載文の第1節の値と同じ。
