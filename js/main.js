@@ -14,13 +14,20 @@
 // 参加の確認と端末の確認の画面から始める。端末の制限、練習の合格条件、完了コードの条件は、オンラインの流れでだけ働く。
 // ?wid= が無いときは、これまでどおりの対面の流れ（12/6 と 12/13 の会場の PC）で動く。
 // タブの背面とフォーカスの喪失の記録、ポインタの種類の記録、最後の音より前のクリックの印は、両方の流れで記録する。
+//
+// v0.5.1。承認済みの倫理審査の申請「候補縮小課題」（2026-10-27 承認）の説明文書と手続きに、オンラインの流れを合わせた。
+// 同意の画面に参加者説明文書と同意のチェックボックスを置き、印を付けて「同意して開始」を押すまで先へ進めない。
+// 同意の前には何も送信しない（端末の条件で止めた人と二重の参加の人の記録は作らず、Firebase の初期化と再送も同意のあとに行う）。
+// 最後の質問と同意の画面の申告は任意にし、「答えない」を選べるようにした。部と部の間に休憩の画面を置いた。
+// 対面の流れの動きは変えていない。
 // ==========================
 
 import {
-  APP_VERSION, GROUPS, MACHINES, INSTRUCTIONS, TIMING, TEST_MODE, ONLINE, AUDIO,
+  APP_VERSION, GROUPS, MACHINES, INSTRUCTIONS, TIMING, TEST_MODE, ONLINE, AUDIO, ONLINE_AGE_BANDS,
 } from "./config.js";
 import {
   parseWid, participantIdFromWid, envProblems, practiceDecision, completionDecision, duplicateDecision,
+  restAfter, surveyValue,
 } from "./online.js";
 import { buildPlan, splitPlanByPart, PART_ORDER, candidatesAfterTones } from "./design.js";
 import { unlockAudio, setGain, getGain, scheduleTones, stopAllTones, playSoundCheck } from "./audio.js";
@@ -329,11 +336,14 @@ const PART_TITLES = {
 // 返り値は、最後の部まで進んだら true、練習で打ち切ったら false。
 async function runAllParts() {
   const parts = splitPlanByPart(state.plan);
+  let restPending = null;   // 直前に終えた部のあとに出す休憩（v0.5.1、オンラインの流れだけ）
   for (const key of PART_ORDER) {
     const remaining = parts.get(key).filter((t) => !state.savedDocIds.has(t.docId));
     if (remaining.length > 0) {
+      if (restPending) { await runRest(restPending); restPending = null; }
       await showPartInstruction(key, remaining);
       await runPart(key, remaining);
+      if (ONLINE_MODE && restAfter(key)) restPending = key;
     }
     // オンラインの流れでは、最初の練習のあとに合格条件を確かめる（v0.5.0）。
     if (key === "practice" && ONLINE_MODE) {
@@ -342,6 +352,26 @@ async function runAllParts() {
     }
   }
   return true;
+}
+
+// 部と部の間の休憩（v0.5.1、オンラインの流れだけ）。承認済みの参加者説明文書の「途中に休憩があります」と、
+// 申請書と研究計画書の「途中に休憩を設ける」「本試行（途中に休憩）」に合わせた。休憩の長さは決めず、
+// 参加者が「次へ」を押すと再開する。休憩の開始と終了の時刻と長さを、セッションの online.rests に残す（同意のあとの記録）。
+// 第1部、第2部、第3部（第3部の練習のあとの本番まで）のそれぞれのあとに出す。読み込み直して途中から再開した部のあとには出さない。
+async function runRest(partKey) {
+  const info = restAfter(partKey);
+  if (!info) return;
+  const startedAt = new Date().toISOString();
+  const t0 = performance.now();
+  await showMessage("休憩", [
+    `${PART_TITLES[partKey]}が終わりました（全 ${info.total} 部のうち ${info.done} 部）。`,
+    "ここで休憩できます。休憩の長さは自由です。目や手を休めてから、続きを始めてください。このページは閉じずに、そのままにしておいてください。",
+    `ただし、Yahoo!クラウドソーシングの制限時間（${ONLINE.timeLimitMinutes} 分）を過ぎると完了コードを提出できなくなるので、休憩が長くなりすぎないようにご注意ください。`,
+    "再開するときは「次へ」を押してください。",
+  ]);
+  const rest = { afterPart: partKey, startedAt, endedAt: new Date().toISOString(), ms: Math.round(performance.now() - t0) };
+  state.session.online = { ...(state.session.online || {}), rests: [...((state.session.online && state.session.online.rests) || []), rest] };
+  await saveSessionLocal(state.session);
 }
 
 // 練習の合格条件（v0.5.0、オンラインの流れだけ）。予定の練習（5回）で正解が ONLINE.practicePassCorrect 回に
@@ -641,10 +671,30 @@ async function runTrial(trial, meta) {
 
 // ---------- アンケート ----------
 
+// オンラインの流れの最後の質問を、承認済みの説明文書の「回答はすべて任意」に合わせる（v0.5.1）。
+// 必須の印を外し、選択式の各問に「答えない」を足し、年齢層の選択肢を研究計画書の別紙の Q1 の区切り（18〜19歳から70代以上）にする。
+// 対面の流れでは呼ばないので、対面の画面はこれまでどおり。
+function prepareOnlineSurvey(form) {
+  if (form.dataset.onlinePrepared) return;
+  form.dataset.onlinePrepared = "1";
+  $("#survey-optional-note").hidden = false;
+  form.querySelectorAll("[required]").forEach((el) => el.removeAttribute("required"));
+  for (const name of ["experience", "handedness", "playedMajikaruta"]) {
+    const radios = form.querySelectorAll(`input[name=${name}]`);
+    const last = radios[radios.length - 1].closest("label");
+    const label = document.createElement("label");
+    label.innerHTML = `<input type="radio" name="${name}" value="noanswer"> 答えない`;
+    last.after(label);
+  }
+  form.ageBand.innerHTML = `<option value="">選んでください</option>` +
+    ONLINE_AGE_BANDS.map((b) => `<option value="${b.value}">${b.label}</option>`).join("");
+}
+
 async function runSurvey() {
   if (state.session.survey) return; // 既に答えている
   showScreen("screen-survey");
   const form = $("#survey-form");
+  if (ONLINE_MODE) prepareOnlineSurvey(form);
   const detail = $("#experience-detail");
   form.querySelectorAll("input[name=experience]").forEach((r) => {
     r.addEventListener("change", () => { detail.hidden = form.experience.value !== "yes"; });
@@ -654,13 +704,14 @@ async function runSurvey() {
       ev.preventDefault();
       form.removeEventListener("submit", onSubmit);
       const fd = new FormData(form);
+      // 未回答は null、「答えない」は noanswer（v0.5.1。対面の流れでは必須なので、これまでと同じ値になる）。
       resolve({
-        experience: fd.get("experience"),
+        experience: surveyValue(fd.get("experience")),
         years: fd.get("years") ? Number(fd.get("years")) : null,
         grade: fd.get("grade") || null,
-        ageBand: fd.get("ageBand"),
-        handedness: fd.get("handedness"),
-        playedMajikaruta: fd.get("playedMajikaruta"),
+        ageBand: surveyValue(fd.get("ageBand")),
+        handedness: surveyValue(fd.get("handedness")),
+        playedMajikaruta: surveyValue(fd.get("playedMajikaruta")),
         answeredAt: new Date().toISOString(),
       });
     };
@@ -730,9 +781,12 @@ async function showDone() {
     if (ONLINE_MODE) {
       const st = session?.status;
       codeBox.hidden = false;
-      codeBox.innerHTML = st === "finished"
-        ? `<p>完了コード</p><p class="code">${ONLINE.completionCode}</p><p>Yahoo!クラウドソーシングの画面に戻り、この 3 桁の数字を入力してください。下の送信の表示が「すべて送信済み」になってから、このページを閉じてください。</p>`
-        : `<p>時間切れの回が多かったため、完了コードは表示されません。</p>`;
+      // v0.5.1: Yahoo の設問は完了コードを 1 桁ずつプルダウンで選ぶ形なので、「入力」ではなく「選んで」と書く。
+      // 承認済みの説明文書の「9．記録の削除の請求」と「10．連絡先」に合わせ、削除の請求の宛先と、添えてもらう作業者IDも出す。
+      const deletion = `<p class="muted">参加後に記録の削除を希望する場合は、参加した日時と、作業者ID（${WID}）を添えて、${ONLINE.contactEmail} までメールでご連絡ください。</p>`;
+      codeBox.innerHTML = (st === "finished"
+        ? `<p>完了コード</p><p class="code">${ONLINE.completionCode}</p><p>Yahoo!クラウドソーシングの設問の画面に戻り、この 3 桁の数字を 1 桁ずつ選んでください。下の送信の表示が「すべて送信済み」になってから、このページを閉じてください。</p>`
+        : `<p>時間切れの回が多かったため、完了コードは表示されません。</p>`) + deletion;
     } else {
       codeBox.hidden = true;
     }
@@ -779,8 +833,9 @@ function init() {
   // 試行中に右クリックのメニューが出ないようにする。
   $("#screen-trial").addEventListener("contextmenu", (ev) => ev.preventDefault());
   if (ONLINE_MODE) {
+    // v0.5.1: 同意の前には何も送信しないので、ここでは Firebase を初期化せず（匿名のログインもしない）、再送もしない。
+    // 再送は同意のあと（startOnline）と、完了済みの人の終了の画面（showDone）で行う。
     startOnline();
-    uploadEnabled().then((ok) => { if (ok) resendUnsent(); });
     return;
   }
   setupOperatorScreen();
@@ -800,25 +855,9 @@ function onlineSessionId(suffix = "") {
   return `${slug(onlineEventName())}_w${WID}${TEST ? "_test" : ""}${suffix}`;
 }
 
-// 本番のセッションとは別の文書に、先へ進めなかった記録（blocked_env、duplicate_browser）を残す。
-async function recordStopped(status, extra = {}) {
-  const doc = {
-    sessionId: onlineSessionId(status === "blocked_env" ? "_blocked" : "_dup"),
-    mode: "online",
-    wid: WID,
-    eventName: onlineEventName(),
-    participantId: participantIdFromWid(WID),
-    status,
-    testMode: TEST,
-    appVersion: APP_VERSION,
-    startedAt: new Date().toISOString(),
-    env: collectEnv(),
-    ...extra,
-    sent: false,
-  };
-  await saveSessionLocal(doc);
-  sendSession(doc).catch(() => {});
-}
+// v0.5.0 では、端末の条件で止めた人（blocked_env）と二重の参加の人（duplicate_browser）の記録を、同意の前に別の文書へ送っていた。
+// 承認済みの申請書と研究計画書の「判定の結果を含め、同意の前には記録を送信しない」に合わせ、v0.5.1 でこの記録をやめた。
+// 端末の条件で一度止まってからウィンドウを広げて同意した人は、同意のあとのセッションの online.envProblemsBeforeConsent に残す。
 
 async function startOnline() {
   // 同じブラウザで完了した記録があれば、二重の参加として止めるか、終了の画面を出し直す。
@@ -833,13 +872,13 @@ async function startOnline() {
     }
     showStop("この課題は終了しています", [
       done.status === "finished"
-        ? `完了コードは <strong>${ONLINE.completionCode}</strong> です。Yahoo!クラウドソーシングの画面に入力してください。`
+        ? `完了コードは <strong>${ONLINE.completionCode}</strong> です。Yahoo!クラウドソーシングの設問の画面で、この 3 桁の数字を 1 桁ずつ選んでください。`
         : "完了コードは表示されません。ご協力ありがとうございました。",
     ]);
     return;
   }
   if (dup === "other") {
-    await recordStopped("duplicate_browser", { previousWid: done.wid });
+    // 同意の前なので記録しない（v0.5.1）。
     showStop("すでに参加いただいています", [
       "このブラウザでは、すでにこの課題に参加いただいています。同じ方の2回目の参加はお受けできません。",
       "ご協力ありがとうございました。このページを閉じてください。",
@@ -848,12 +887,18 @@ async function startOnline() {
   }
 
   showScreen("screen-online-start");
+  // 説明文書の中の作業者IDと承認番号を埋める（v0.5.1）。
+  document.querySelectorAll(".js-wid").forEach((el) => { el.textContent = WID; });
+  $("#ethics-number").textContent = ONLINE.ethicsApprovalNumber ? `（承認番号：${ONLINE.ethicsApprovalNumber}）` : "";
   const box = $("#env-check");
   const form = $("#online-env-form");
   const startBtn = $("#btn-online-start");
   const recheckBtn = $("#btn-env-recheck");
-  let blockedRecorded = false;
+  const consentBox = $("#consent-check");
+  // 端末の条件で止まったことがあるか。同意の前には送らず、同意したときだけセッションに残す（v0.5.1）。
+  const envProblemsBeforeConsent = { narrow: false, short: false };
   let envOk = false;
+  const updateStartButton = () => { startBtn.disabled = !(envOk && consentBox.checked); };
   const check = () => {
     const env = collectEnv();
     const r = envProblems(env);
@@ -864,16 +909,15 @@ async function startOnline() {
     } else {
       box.className = "env-check ng";
       box.innerHTML = r.problems.map((p) => `<p>${p}</p>`).join("");
-      if (!blockedRecorded) {
-        blockedRecorded = true;
-        recordStopped("blocked_env", { envProblems: { mobile: r.mobile, narrow: r.narrow, short: r.short } });
-      }
+      if (r.narrow) envProblemsBeforeConsent.narrow = true;
+      if (r.short) envProblemsBeforeConsent.short = true;
     }
     form.hidden = r.mobile;          // スマートフォンとタブレットは、開き直す以外に解決できない
     recheckBtn.hidden = envOk || r.mobile;
-    startBtn.disabled = !envOk;
+    updateStartButton();
     return envOk;
   };
+  consentBox.addEventListener("change", updateStartButton);
   check();
   window.addEventListener("resize", check);
   recheckBtn.addEventListener("click", check);
@@ -883,6 +927,7 @@ async function startOnline() {
     const onSubmit = (ev) => {
       ev.preventDefault();
       if (!check()) return;
+      if (!consentBox.checked) return;   // 同意のチェックボックスに印が無ければ先へ進めない（v0.5.1）
       const fd = new FormData(form);
       quizAttempts++;
       const fb = $("#quiz-feedback");
@@ -892,11 +937,16 @@ async function startOnline() {
         return;
       }
       form.removeEventListener("submit", onSubmit);
-      resolve({ pointerDevice: fd.get("pointerDevice"), audioDevice: fd.get("audioDevice") });
+      // 申告は任意（v0.5.1）。未回答は null、「答えない」は noanswer。
+      resolve({ pointerDevice: surveyValue(fd.get("pointerDevice")), audioDevice: surveyValue(fd.get("audioDevice")) });
     };
     form.addEventListener("submit", onSubmit);
   });
   window.removeEventListener("resize", check);
+  const consentedAt = new Date().toISOString();
+
+  // 同意のあとで初めて送信先を初期化し、このブラウザに残った未送信の記録を再送する（v0.5.1）。
+  uploadEnabled().then((ok) => { if (ok) resendUnsent(); });
 
   await unlockAudio();
   setGain(AUDIO.gain);
@@ -911,7 +961,10 @@ async function startOnline() {
       pointerDevice: answers.pointerDevice,
       audioDevice: answers.audioDevice,
       quizAttempts,
-      consentedAt: new Date().toISOString(),
+      consentedAt,
+      // 同意の取り方（v0.5.1）。チェックボックスに印を付けて「同意して開始」を押した。
+      consent: { method: "checkbox_and_button", checked: true, at: consentedAt },
+      envProblemsBeforeConsent,
     },
   });
 }

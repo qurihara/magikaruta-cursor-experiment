@@ -6,7 +6,7 @@
   <title>まじかるた 収集B</title>
   <link rel="stylesheet" href="style.css">
   <!-- Firebase の設定。送信先は js/upload-config.js で選ぶ（v0.3.0 から既定は Firebase）。?v= は、ブラウザに残った古い設定のファイルを使わせないための版の印で、設定を変えたら上げる。 -->
-  <script src="js/firebase-config.js?v=0.5.0"></script>
+  <script src="js/firebase-config.js?v=0.5.1"></script>
 </head>
 <body>
   <div id="app">
@@ -54,29 +54,98 @@
     </section>
 
     <!-- オンラインの流れ（URL に ?wid= があるとき、v0.5.0）。1. 参加の確認と端末の確認 -->
+    <!-- v0.5.1: 承認済みの申請（候補縮小課題、2026-10-27 承認）の同意の取り方に合わせ、参加者説明文書をこの画面に表示し、
+         同意のチェックボックスに印を付けて「同意して開始」を押すまで先へ進めないようにした。同意の前には何も送信しない。 -->
     <section id="screen-online-start" class="screen">
       <h1>まじかるたの課題（パソコンで約15分）</h1>
       <div class="instruction">
         <p>この課題では、電子音の回数で札を取る遊び「まじかるた」を、パソコンの画面の上でマウスを使って行います。かかる時間は約15分です。</p>
-        <p>参加の条件と、記録する情報の扱いは、募集のページ（タスクの説明）に書いたとおりです。内容に同意いただける方だけ、先へ進んでください。途中でやめることもできます。</p>
+        <p>下の説明を読み、内容に同意いただける方だけ、チェックボックスに印を付けて「同意して開始」を押してください。途中でやめることもできます。</p>
       </div>
       <div id="env-check" class="env-check"></div>
       <div class="row"><button type="button" id="btn-env-recheck" hidden>もう一度確かめる</button></div>
 
+      <div id="consent-doc" class="consent-doc" tabindex="0">
+        <h2>研究への参加についての説明（同意文書を兼ねます）</h2>
+        <p>研究課題名：候補集合が段階的に縮小する選択反応における判断と動作の時間特性の計測<br>
+        研究責任者：栗原 一貴（津田塾大学 学芸学部情報科学科 教授）<br>
+        共同研究者：丸山 礼華（津田塾大学 理学研究科 後期博士課程）</p>
+
+        <h3>1．研究の目的</h3>
+        <p>人は、選べるものの数が多いほど、選ぶのに時間がかかります。本研究は、選べるものが途中でだんだん減っていく場面で、人がどのくらいの速さで判断を切り替え、手を動かすのかを調べることを目的としています。文字を打つほど候補が減る予測変換や、音が進むほど正解が絞られるゲーム、読み上げが進むほど取るべき札が絞られる競技かるたなどの場面に役立てます。</p>
+
+        <h3>2．お願いする内容</h3>
+        <p>画面に、1 から 12 の値が書かれた札が並びます。電子音が鳴った回数を数え、最後の高い音が鳴ったら、同じ値の札を、マウスでできるだけ速く正確にクリックしてください。</p>
+        <p>所要時間は約15分です（途中に休憩があります）。練習のあと本番（4部）を行い、最後にいくつかの質問にお答えいただきます。この実験では最大100名を募集します。</p>
+        <p>音を使う課題なので、有線のイヤホンかヘッドホン、またはパソコンのスピーカーをご用意ください。開始前に確認音で音量を調整していただきます。</p>
+        <p>練習で正解が 2 回に届かないときは、練習を 1 回ずつ足します。練習の合計が 15 回に達しても届かない場合は、その時点で終了となります。</p>
+
+        <h3>3．参加の任意性と撤回</h3>
+        <ul>
+          <li>参加は自由意思によるものです。</li>
+          <li>理由を問わずいつでも中断できます。ブラウザのタブを閉じれば終了します。</li>
+          <li>参加しないこと、途中でやめることによって不利益を受けることはありません。</li>
+          <li>途中でやめた場合、それまでに送信された記録は分析に使いません。</li>
+          <li>謝礼は最後に表示される完了コードを提出した方にお支払いします。プラットフォームの仕組み上、途中でやめた場合は謝礼をお支払いできません。</li>
+        </ul>
+
+        <h3>4．記録する内容</h3>
+        <ul>
+          <li>各回の反応時間、正誤、選んだ札、最後の音より前のクリックや時間切れの有無、札の外をクリックした回数、課題の条件</li>
+          <li>マウスの操作の時刻と位置（カーソルの動きの軌跡を含む）</li>
+          <li>使用環境（OS〔Windows、macOS などの基本ソフトウェア〕、ブラウザの種類、画面の大きさ、入力装置の種類）と、課題のあいだこのページが前面にあったかどうか</li>
+          <li>どこまで進んだか（同意、練習、本番、休憩、質問）</li>
+          <li>参加者を区別するための識別子（Yahoo!クラウドソーシングの設問に割り当てた英数字の作業者IDと、ブラウザごとに発行される匿名の識別子）</li>
+          <li>この画面でお答えいただく内容（カーソルを動かすのに使うもの、音を聞くのに使うもの）と、最後の質問への回答（すべて任意です）</li>
+        </ul>
+        <p>氏名、住所、電話番号、メールアドレスは記録しません。クッキーや閲覧履歴など、他のサイトの情報も取得しません。カメラとマイクは使いません。同意の前には何も送信しません。</p>
+
+        <h3>5．記録の保管と取扱い</h3>
+        <ul>
+          <li>記録は Google Cloud Firestore（Google が提供するクラウドデータベース）に保管し、研究責任者と共同研究者だけが扱います。</li>
+          <li>個人を特定できない形にした記録は、その記録を使った成果の公表後10年間保管します。謝礼の照合に使う識別子は、支払いの完了から6か月以内に削除します。</li>
+          <li>本研究の目的にのみ使います。</li>
+        </ul>
+
+        <h3>6．成果の公表</h3>
+        <p>結果は学会発表や学術論文で公表します。公表には個人を特定できない形のデータだけを使います。また、成果を検証できるように、個人を特定できない形の試行データ（識別子や自由記述を除く）と、分析のプログラム、条件ごとの集計値を、研究データを保管して公開する専用のサイトで公開することがあります。</p>
+
+        <h3>7．謝礼</h3>
+        <p>課題の完了時に、Yahoo!クラウドソーシングを通じて 54 ポイントをお支払いします。</p>
+
+        <h3>8．予想される負担とリスク</h3>
+        <p>画面を見て、音を聴いて、マウスを操作する課題で、身体や心への大きな負担はありません。集中による軽い疲れが出ることがあります。画面の広い範囲が激しく点滅する刺激は使いませんが、札を示す小さな枠の色が切り替わることがあります。光の点滅で気分が悪くなったことのある方は参加をお控えください。18歳未満の方は参加できません。</p>
+
+        <h3>9．記録の削除の請求</h3>
+        <p>参加後に記録の削除を希望する場合は、参加した日時と、あなたの作業者ID（<strong class="js-wid"></strong>）を添えて、下記までメールでご連絡ください。完了コードは全員に共通なので、削除の請求には使えません。個人を特定できない形にして公開した後のデータや、発表済みの集計結果からは削除できません。</p>
+
+        <h3>10．研究責任者・連絡先</h3>
+        <p>研究責任者：栗原 一貴（津田塾大学 学芸学部情報科学科 教授）　kurihara@tsuda.ac.jp<br>
+        共同研究者：丸山 礼華（津田塾大学 理学研究科 後期博士課程）　md2581ma@gm.tsuda.ac.jp</p>
+
+        <h3>11．倫理審査</h3>
+        <p>本研究は津田塾大学倫理審査委員会の承認を得て実施します<span id="ethics-number"></span>。</p>
+
+        <p>以上の内容を読み、同意いただける場合は、下のチェックボックスに印を付けて「同意して開始」ボタンを押してください。</p>
+      </div>
+
       <form id="online-env-form" class="survey-form" autocomplete="off">
+        <p class="muted">次の 2 つの質問への回答は任意です。答えたくない場合は「答えない」を選ぶか、空欄のままで進めます。</p>
         <fieldset>
-          <legend>カーソルを動かすのに使うもの</legend>
-          <label><input type="radio" name="pointerDevice" value="mouse" required> マウス</label>
+          <legend>カーソルを動かすのに使うもの（任意）</legend>
+          <label><input type="radio" name="pointerDevice" value="mouse"> マウス</label>
           <label><input type="radio" name="pointerDevice" value="touchpad"> タッチパッド（トラックパッド）</label>
           <label><input type="radio" name="pointerDevice" value="other"> そのほか（トラックボール、ペンなど）</label>
+          <label><input type="radio" name="pointerDevice" value="noanswer"> 答えない</label>
           <p class="muted">できればマウスをお使いください。</p>
         </fieldset>
         <fieldset>
-          <legend>音を聞くのに使うもの</legend>
-          <label><input type="radio" name="audioDevice" value="wired" required> 有線のイヤホンまたはヘッドホン</label>
+          <legend>音を聞くのに使うもの（任意）</legend>
+          <label><input type="radio" name="audioDevice" value="wired"> 有線のイヤホンまたはヘッドホン</label>
           <label><input type="radio" name="audioDevice" value="speaker"> パソコンのスピーカー</label>
           <label><input type="radio" name="audioDevice" value="bluetooth"> Bluetooth（無線）のイヤホンまたはヘッドホン</label>
           <label><input type="radio" name="audioDevice" value="other"> そのほか</label>
+          <label><input type="radio" name="audioDevice" value="noanswer"> 答えない</label>
           <p class="muted">Bluetooth のイヤホンは音が遅れて届くので、できるだけ有線のイヤホンかパソコンのスピーカーをお使いください。静かな場所で行ってください。</p>
         </fieldset>
         <fieldset>
@@ -87,7 +156,11 @@
           <label><input type="radio" name="quiz" value="8"> 8 の札</label>
           <p id="quiz-feedback" class="notice" hidden></p>
         </fieldset>
-        <div class="row"><button type="submit" class="primary" id="btn-online-start">同意して始める</button></div>
+        <fieldset class="consent-box">
+          <legend>同意の確認</legend>
+          <label><input type="checkbox" id="consent-check" name="consent" value="yes" required> 上の説明を読んで内容を理解し、この研究に参加することに同意します。</label>
+        </fieldset>
+        <div class="row"><button type="submit" class="primary" id="btn-online-start" disabled>同意して開始</button></div>
       </form>
     </section>
 
@@ -136,6 +209,8 @@
     <!-- アンケート -->
     <section id="screen-survey" class="screen">
       <h1>アンケート</h1>
+      <!-- v0.5.1: オンラインの流れでは、承認済みの説明文書の「回答はすべて任意」に合わせ、この注記を出し、各問に「答えない」を足して、未回答でも送信できるようにする（main.js の prepareOnlineSurvey）。 -->
+      <p id="survey-optional-note" class="muted" hidden>回答はすべて任意です。答えたくない質問は「答えない」を選ぶか、空欄のままで「送信して終了」を押してください。回答しなくても、完了コードは表示されます。</p>
       <form id="survey-form" class="survey-form">
         <fieldset>
           <legend>競技かるたの経験</legend>
@@ -190,6 +265,6 @@
   <div id="version-label" class="version-label"></div>
   <div id="test-mode-label" class="test-mode-label" hidden>テストモード</div>
 
-  <script type="module" src="js/main.js?v=0.5.0"></script>
+  <script type="module" src="js/main.js?v=0.5.1"></script>
 </body>
 </html>

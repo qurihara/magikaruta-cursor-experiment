@@ -3,8 +3,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseWid, participantIdFromWid, isMobileEnv, envProblems, practiceDecision, completionDecision, duplicateDecision,
+  restAfter, surveyValue,
 } from "../js/online.js";
-import { ONLINE } from "../js/config.js";
+import { ONLINE, ONLINE_AGE_BANDS, APP_VERSION } from "../js/config.js";
+import { readFileSync } from "node:fs";
 
 const P = (q) => new URLSearchParams(q);
 
@@ -79,4 +81,69 @@ test("同じブラウザでの二重の参加の判定", () => {
   assert.equal(duplicateDecision(null, "a1"), "new");
   assert.equal(duplicateDecision({ wid: "a1" }, "a1"), "same");
   assert.equal(duplicateDecision({ wid: "a1" }, "b2"), "other");
+});
+
+// ---------- v0.5.1（承認済みの倫理審査の文書に合わせた直し） ----------
+
+test("休憩は第1部、第2部、第3部のあとに出し、練習と第3部の練習と第4部のあとには出さない", () => {
+  assert.deepEqual(restAfter("part1"), { done: 1, total: 4 });
+  assert.deepEqual(restAfter("part2"), { done: 2, total: 4 });
+  assert.deepEqual(restAfter("part3"), { done: 3, total: 4 });
+  for (const k of ["practice", "part3practice", "part4", "unknown"]) assert.equal(restAfter(k), null);
+});
+
+test("最後の質問の未回答は null、「答えない」はそのまま", () => {
+  assert.equal(surveyValue(null), null);
+  assert.equal(surveyValue(undefined), null);
+  assert.equal(surveyValue(""), null);
+  assert.equal(surveyValue("noanswer"), "noanswer");
+  assert.equal(surveyValue("right"), "right");
+});
+
+test("オンラインの年齢層の選択肢は研究計画書の別紙の Q1 と同じで、18歳未満の区切りが無く、「答えない」がある", () => {
+  assert.deepEqual(ONLINE_AGE_BANDS.map((b) => b.label), ["18〜19歳", "20代", "30代", "40代", "50代", "60代", "70代以上", "答えない"]);
+});
+
+const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
+
+test("版の数字が config.js、index.html の ?v=、package.json でそろっている", () => {
+  const v = APP_VERSION.replace(/^v/, "");
+  const html = read("../index.html");
+  const marks = [...html.matchAll(/\?v=([0-9.]+)/g)].map((m) => m[1]);
+  assert.ok(marks.length >= 2);
+  for (const m of marks) assert.equal(m, v);
+  assert.equal(JSON.parse(read("../package.json")).version, v);
+});
+
+test("同意の画面に、同意のチェックボックスと「同意して開始」のボタン（最初は押せない）がある", () => {
+  const html = read("../index.html");
+  assert.match(html, /<input type="checkbox" id="consent-check"[^>]*required/);
+  assert.match(html, /<button type="submit" class="primary" id="btn-online-start" disabled>同意して開始<\/button>/);
+  // 同意の画面の申告（ポインタと音の機器）は任意で、「答えない」がある
+  assert.doesNotMatch(html, /name="pointerDevice"[^>]*required/);
+  assert.doesNotMatch(html, /name="audioDevice"[^>]*required/);
+  assert.match(html, /name="pointerDevice" value="noanswer"/);
+  assert.match(html, /name="audioDevice" value="noanswer"/);
+});
+
+test("同意の前に記録を送らない（端末の条件と二重の参加の記録を作らず、起動時に送信先を初期化しない）", () => {
+  const main = read("../js/main.js");
+  assert.doesNotMatch(main, /recordStopped\(/);
+  const init = main.slice(main.indexOf("function init()"), main.indexOf("// ---------- オンラインの流れ"));
+  const onlineBranch = init.slice(init.indexOf("if (ONLINE_MODE)"), init.indexOf("setupOperatorScreen();"));
+  assert.doesNotMatch(onlineBranch, /uploadEnabled|resendUnsent|sendSession/);
+  // startOnline の中で、送信に関わる呼び出しは同意（consentedAt）のあとにだけある
+  const so = main.slice(main.indexOf("async function startOnline()"));
+  const consentPos = so.indexOf("const consentedAt");
+  assert.ok(consentPos > 0);
+  for (const name of ["uploadEnabled(", "resendUnsent(", "sendSession(", "startSession("]) {
+    const pos = so.indexOf(name);
+    if (pos >= 0) assert.ok(pos > consentPos, `${name} が同意の前にある`);
+  }
+});
+
+test("終了の画面は完了コードを「選んで」と案内し、「入力して」とは書かない", () => {
+  const main = read("../js/main.js");
+  assert.doesNotMatch(main, /数字を入力してください|画面に入力してください/);
+  assert.match(main, /1 桁ずつ選んでください/);
 });

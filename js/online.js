@@ -1,11 +1,11 @@
 // ==========================
 // online.js
 // ==========================
-// オンラインの募集（Yahoo!クラウドソーシング）のための判定の関数（v0.5.0）。
+// オンラインの募集（Yahoo!クラウドソーシング）のための判定の関数（v0.5.0、v0.5.1 で休憩と任意回答の関数を足した）。
 // DOM に触れない純粋な関数だけを置き、Node の test runner で検査する（test/online.test.js）。
 // ==========================
 
-import { ONLINE } from "./config.js";
+import { ONLINE, REST_AFTER_PARTS, MAIN_PART_COUNT } from "./config.js";
 import { hashSeed } from "./design.js";
 
 // URL の ?wid= から作業者IDを取り出す。半角英数 1〜20 文字だけを受け、それ以外は null にする。
@@ -70,4 +70,20 @@ export function completionDecision(records, { minRatio = ONLINE.minAnsweredRatio
 export function duplicateDecision(doneRecord, wid) {
   if (!doneRecord || !doneRecord.wid) return "new";
   return doneRecord.wid === wid ? "same" : "other";
+}
+
+// 部の終わりに休憩の画面を出すかを決める（v0.5.1）。partKey はいま終えた部。
+// 返り値は、休憩を出すなら { done, total }（全 total 部のうち done 部が終わった）、出さないなら null。
+// 練習、第3部の練習、第4部（最後の部）のあとは null。
+export function restAfter(partKey) {
+  const done = REST_AFTER_PARTS[partKey];
+  return done ? { done, total: MAIN_PART_COUNT } : null;
+}
+
+// 最後の質問の1問の値をそろえる（v0.5.1）。回答はすべて任意なので、未回答（ラジオの未選択は null、
+// 選択肢の「選んでください」は空の文字列）は null にし、それ以外（「答えない」の noanswer を含む）はそのまま返す。
+export function surveyValue(v) {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  return s === "" ? null : s;
 }

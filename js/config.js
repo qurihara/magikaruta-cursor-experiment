@@ -7,7 +7,7 @@
 // ==========================
 
 // アプリの版の数字。直したら必ず上げる。画面の右下に出す。
-export const APP_VERSION = "v0.5.0";
+export const APP_VERSION = "v0.5.1";
 
 // 電子音の間隔 t の5水準（秒）。参加者内の要因。
 export const T_LEVELS = [0.1, 0.2, 0.4, 0.8, 1.6];
@@ -143,4 +143,30 @@ export const ONLINE = {
   minAnsweredRatio: 0.7,
   // 同じブラウザで完了した記録を残す localStorage の鍵。テストモード（?test=1）では書かない。
   doneKey: "collectionB.onlineDone",
+  // 倫理審査の承認番号（v0.5.1）。同意の画面の説明文の「11．倫理審査」に出す。空のときは番号の括弧を出さない。
+  // 結果通知書の PDF から栗原さんが読み取り、掲載文の承認番号と同じ値を入れる（台帳ではまだ未転記）。
+  ethicsApprovalNumber: "",
+  // 記録の削除の請求と問い合わせの宛先（v0.5.1）。承認済みの参加者説明文書の「10．研究責任者・連絡先」と同じ。
+  contactEmail: "kurihara@tsuda.ac.jp",
+  // 部と部の間の休憩の画面（v0.5.1）で知らせる、募集のページの制限時間（分）。掲載文の第1節の値と同じ。
+  timeLimitMinutes: 60,
 };
+
+// オンラインの流れの最後の質問の年齢層の選択肢（v0.5.1）。承認済みの研究計画書の別紙の Q1 と同じ区切り。
+// 対面の流れは、これまでどおり index.html の選択肢（9 歳以下から 60 歳以上）を使う。
+export const ONLINE_AGE_BANDS = [
+  { value: "18-19", label: "18〜19歳" },
+  { value: "20s", label: "20代" },
+  { value: "30s", label: "30代" },
+  { value: "40s", label: "40代" },
+  { value: "50s", label: "50代" },
+  { value: "60s", label: "60代" },
+  { value: "70plus", label: "70代以上" },
+  { value: "noanswer", label: "答えない" },
+];
+
+// オンラインの流れで、部の終わりに休憩の画面を出す部と、全4部のうち何部目か（v0.5.1）。
+// 承認済みの参加者説明文書の「所要時間は約〈◯〉分です（途中に休憩があります）」と、申請書の「途中に休憩を設ける」に合わせる。
+// 第4部のあとは最後の質問なので、休憩の画面を出さない。
+export const REST_AFTER_PARTS = { part1: 1, part2: 2, part3: 3 };
+export const MAIN_PART_COUNT = 4;
