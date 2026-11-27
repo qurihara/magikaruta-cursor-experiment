@@ -6,7 +6,7 @@
   <title>数字のカードを選ぶ課題</title>
   <link rel="stylesheet" href="style.css">
   <!-- Firebase の設定。送信先は js/upload-config.js で選ぶ（v0.3.0 から既定は Firebase）。?v= は、ブラウザに残った古い設定のファイルを使わせないための版の印で、設定を変えたら上げる。 -->
-  <script src="js/firebase-config.js?v=0.7.0"></script>
+  <script src="js/firebase-config.js?v=0.7.1"></script>
 </head>
 <body>
   <div id="app">
@@ -168,20 +168,7 @@
       </div>
 
       <form id="online-env-form" class="survey-form" autocomplete="off">
-        <fieldset>
-          <legend>ルールの確認</legend>
-          <p>問1　電子音が 7 回鳴りました（最後の 7 回目だけが高い音）。どのカードをクリックしますか。</p>
-          <label><input type="radio" name="quiz" value="6" required> 6 のカード</label>
-          <label><input type="radio" name="quiz" value="7"> 7 のカード</label>
-          <label><input type="radio" name="quiz" value="8"> 8 のカード</label>
-          <p id="quiz-feedback" class="notice" hidden></p>
-          <!-- v0.7.0: 正解が画面のカードのどれかであり、1つに決まったら待たずにクリックしてよいことを確かめる問い（栗原さんの決定）。 -->
-          <p>問2　1、2、5、12 のカードが並んでいます。低い音が 5 回鳴って、まだ続いています。どのカードが正解ですか。</p>
-          <label><input type="radio" name="quiz2" value="5" required> 5 のカード</label>
-          <label><input type="radio" name="quiz2" value="6"> 6 のカード</label>
-          <label><input type="radio" name="quiz2" value="12"> 12 のカード</label>
-          <p id="quiz2-feedback" class="notice" hidden></p>
-        </fieldset>
+        <!-- v0.7.1: ルールの確認の問いは同意とは関係が無い（理解の確認である）ので、同意の画面から外し、課題の説明の画面に移した（栗原さんの指摘）。 -->
         <fieldset class="consent-box">
           <legend>同意の確認</legend>
           <label><input type="checkbox" id="consent-check" name="consent" value="yes" required> 上の説明を読んで内容を理解し、この研究に参加することに同意します。</label>
@@ -215,7 +202,26 @@
         <p>たとえば、低い音が 6 回鳴ったあと、7 回目に高い音が鳴ったら、正解は 7 です。7 のカードをクリックしてください。</p>
         <p>正解は、必ず画面に並んでいるカードのどれかです。画面にないカードの数字が正解になることはありません。</p>
         <p>たとえば、1、2、5、12 のカードが並んでいるとします。低い音が 5 回鳴ってまだ続いていれば、正解は 6 以上の数字なので、12 しかありません。このように正解が 1 つに決まったら、最後の高い音を待たずに 12 をクリックしてかまいません。</p>
-        <p>まず、音が聞こえることを確かめてください。</p>
+      </div>
+      <!-- v0.7.1: 上の説明を読んだ直後に、理解を確かめる 2 つの問いを出す（栗原さんの指摘。v0.7.0 では同意の画面にあり、説明の前に問 2 を尋ねていた）。
+           対面の流れでもオンラインの流れでも出し、2 問とも正しく答え、音を確かめるまで「次へ」に進めない。試みた回数はセッションの ruleCheck に残す。 -->
+      <form id="rule-check-form" class="survey-form" autocomplete="off">
+        <fieldset>
+          <legend>ルールの確認</legend>
+          <p>問1　電子音が 7 回鳴りました（最後の 7 回目だけが高い音）。どのカードをクリックしますか。</p>
+          <label><input type="radio" name="quiz" value="6"> 6 のカード</label>
+          <label><input type="radio" name="quiz" value="7"> 7 のカード</label>
+          <label><input type="radio" name="quiz" value="8"> 8 のカード</label>
+          <p id="quiz-feedback" class="notice" hidden></p>
+          <p>問2　1、2、5、12 のカードが並んでいます。低い音が 5 回鳴って、まだ続いています。どのカードが正解ですか。</p>
+          <label><input type="radio" name="quiz2" value="5"> 5 のカード</label>
+          <label><input type="radio" name="quiz2" value="6"> 6 のカード</label>
+          <label><input type="radio" name="quiz2" value="12"> 12 のカード</label>
+          <p id="quiz2-feedback" class="notice" hidden></p>
+        </fieldset>
+      </form>
+      <div class="instruction">
+        <p>2 つの問いに答えたら、音が聞こえることを確かめて、「次へ」を押してください。</p>
       </div>
       <div class="row">
         <button type="button" id="btn-intro-sound" class="primary">音を鳴らす</button>
@@ -311,6 +317,6 @@
   <div id="version-label" class="version-label"></div>
   <div id="test-mode-label" class="test-mode-label" hidden>テストモード</div>
 
-  <script type="module" src="js/main.js?v=0.7.0"></script>
+  <script type="module" src="js/main.js?v=0.7.1"></script>
 </body>
 </html>

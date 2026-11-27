@@ -187,7 +187,13 @@ test("教示の文と画面の文に、かるたを前提にした言い方（�
   assert.match(html, /name="quiz2" value="12"/);
   const main = read("../js/main.js");
   assert.match(main, /board\.showFeedback\("不正解", "miss"\)/);
-  assert.match(main, /quiz2Attempts,/);
+  assert.match(main, /rc\.q2Attempts\+\+/);
+  // v0.7.1: ルールの確認の問いは、同意の画面ではなく、課題の説明の画面にある。
+  const consentForm = html.slice(html.indexOf('<form id="online-env-form"'), html.indexOf("</form>", html.indexOf('<form id="online-env-form"')));
+  assert.doesNotMatch(consentForm, /name="quiz/);
+  const intro = html.slice(html.indexOf('<section id="screen-intro"'), html.indexOf("</section>", html.indexOf('<section id="screen-intro"')));
+  assert.ok(intro.indexOf("1、2、5、12 のカードが並んでいるとします") < intro.indexOf('name="quiz2"'));
+  assert.match(intro, /name="quiz" value="7"/);
 });
 
 test("ルール紹介の映像のファイルがあり、GitHub Pages で配信できる大きさ（5MB 未満）で、映像の画面が index.html にある", () => {

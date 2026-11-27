@@ -321,13 +321,49 @@ async function startSession({ participantId, group, machine = "", eventName, onl
   await showDone();
 }
 
+// v0.7.1: 課題の説明のあとに、ルールの確認の 2 問を出す（v0.7.0 では同意の画面にあった。栗原さんの指摘で、説明を読んだあとに移した）。
+// 2 問とも正しく答え、音を確かめるまで先へ進めない。試みた回数（「次へ」を押した回数）はセッションの ruleCheck に残す。
+// 続きから再開した参加者で、すでに通っている場合は、問いを答えた状態にしておく。
 async function runIntro() {
   const soundBtn = $("#btn-intro-sound");
   const nextBtn = $("#btn-intro-next");
+  const form = $("#rule-check-form");
+  const fb1 = $("#quiz-feedback");
+  const fb2 = $("#quiz2-feedback");
+  fb1.hidden = true;
+  fb2.hidden = true;
+  const passedBefore = Boolean(state.session.ruleCheck?.passedAt);
+  if (passedBefore) {
+    form.querySelector('input[name="quiz"][value="7"]').checked = true;
+    form.querySelector('input[name="quiz2"][value="12"]').checked = true;
+  }
+  const rc = state.session.ruleCheck || { q1Attempts: 0, q2Attempts: 0, passedAt: null };
   const onSound = async () => { await unlockAudio(); playSoundCheck(); nextBtn.disabled = false; };
   soundBtn.addEventListener("click", onSound);
-  await waitForClick(nextBtn);
+  for (;;) {
+    await waitForClick(nextBtn);
+    const fd = new FormData(form);
+    rc.q1Attempts++;
+    if (fd.get("quiz") !== "7") {
+      fb1.hidden = false;
+      fb1.textContent = fd.get("quiz") ? "問1が違います。鳴った回数が、正解の数字です。もう一度選んでください。" : "問1に答えてください。";
+      fb2.hidden = true;
+      continue;
+    }
+    fb1.hidden = true;
+    rc.q2Attempts++;
+    if (fd.get("quiz2") !== "12") {
+      fb2.hidden = false;
+      fb2.textContent = fd.get("quiz2") ? "問2が違います。正解は、画面に並んでいるカードのどれかです。低い音が 5 回鳴ってまだ続いていれば、正解は 6 以上です。もう一度選んでください。" : "問2に答えてください。";
+      continue;
+    }
+    fb2.hidden = true;
+    break;
+  }
   soundBtn.removeEventListener("click", onSound);
+  if (!rc.passedAt) rc.passedAt = new Date().toISOString();
+  state.session.ruleCheck = rc;
+  await saveSessionLocal(state.session);
 }
 
 // 教示やブロックの知らせを出し、「次へ」を待つ。
@@ -1121,31 +1157,12 @@ async function startOnline() {
   consentSection.hidden = false;
   window.scrollTo(0, 0);
 
-  let quizAttempts = 0;
-  let quiz2Attempts = 0;
+  // v0.7.1: ルールの確認の問いは、課題の説明の画面（runIntro）へ移した。この画面では同意だけを確かめる。
   const answers = await new Promise((resolve) => {
     const onSubmit = (ev) => {
       ev.preventDefault();
       if (!check()) return;
       if (!consentBox.checked) return;   // 同意のチェックボックスにチェックが無ければ先へ進めない（v0.5.1）
-      const fd = new FormData(form);
-      quizAttempts++;
-      const fb = $("#quiz-feedback");
-      if (fd.get("quiz") !== "7") {
-        fb.hidden = false;
-        fb.textContent = "問1が違います。鳴った回数が、正解の数字です。もう一度選んでください。";
-        return;
-      }
-      fb.hidden = true;
-      // v0.7.0: 問2（正解が画面のカードのどれかで、1 つに決まったら待たずにクリックしてよいこと）。
-      quiz2Attempts++;
-      const fb2 = $("#quiz2-feedback");
-      if (fd.get("quiz2") !== "12") {
-        fb2.hidden = false;
-        fb2.textContent = "問2が違います。正解は、画面に並んでいるカードのどれかです。低い音が 5 回鳴ってまだ続いていれば、正解は 6 以上です。もう一度選んでください。";
-        return;
-      }
-      fb2.hidden = true;
       form.removeEventListener("submit", onSubmit);
       // v0.6.3: 機器の答えは、この画面の前の参加の条件の確認（必須）で得たものを使う（v0.5.1 から v0.6.2 では、この画面の任意の申告だった）。
       resolve({ pointerDevice: requirements.pointerDevice, audioDevice: requirements.audioDevice });
@@ -1174,8 +1191,6 @@ async function startOnline() {
       audioDevice: answers.audioDevice,
       requirementSelections,
       requirementsPassedAt: requirements.passedAt,
-      quizAttempts,
-      quiz2Attempts,
       consentedAt,
       // 同意の取り方（v0.5.1）。チェックボックスにチェックを入れて「同意して開始」を押した。
       consent: { method: "checkbox_and_button", checked: true, at: consentedAt },
