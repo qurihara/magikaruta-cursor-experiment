@@ -6,7 +6,7 @@
   <title>まじかるた 収集B</title>
   <link rel="stylesheet" href="style.css">
   <!-- Firebase の設定。送信先は js/upload-config.js で選ぶ（v0.3.0 から既定は Firebase）。?v= は、ブラウザに残った古い設定のファイルを使わせないための版の印で、設定を変えたら上げる。 -->
-  <script src="js/firebase-config.js?v=0.6.2"></script>
+  <script src="js/firebase-config.js?v=0.6.3"></script>
 </head>
 <body>
   <div id="app">
@@ -56,14 +56,52 @@
     <!-- オンラインの流れ（URL に ?wid= があるとき、v0.5.0）。1. 参加の確認と端末の確認 -->
     <!-- v0.5.1: 承認済みの申請（候補縮小課題、2026-10-27 承認）の同意の取り方に合わせ、参加者説明文書をこの画面に表示し、
          同意のチェックボックスにチェックを入れて「同意して開始」を押すまで先へ進めないようにした。同意の前には何も送信しない。 -->
+    <!-- v0.6.3: 長い同意の説明より前に「参加の条件の確認」（マウスと音の機器）を置いた（栗原さんの決定）。条件に合わない人が数秒で分かって引き返せるようにする。
+         この確認は最後の質問（任意）ではなく参加の条件なので、必須で「答えない」は無い。マウス以外と Bluetooth を選んだ人は先へ進めない。
+         端末と画面の条件を満たしているときは何も表示せず、満たしていないときだけ案内を出す。条件の確認で止まった人の記録は作らない（同意の前には何も送信しない）。 -->
     <section id="screen-online-start" class="screen">
       <h1>まじかるたの課題（パソコンで約20分）</h1>
       <div class="instruction">
         <p>この課題では、電子音の回数で札を取る遊び「まじかるた」を、パソコンの画面の上でマウスを使って行います。かかる時間は約20分です。</p>
+      </div>
+      <div id="env-check" class="env-check" hidden></div>
+      <div class="row"><button type="button" id="btn-env-recheck" hidden>もう一度確かめる</button></div>
+
+      <div id="online-requirements">
+        <h2>参加の条件の確認</h2>
+        <p>この課題には、マウスと、有線のイヤホンかパソコンのスピーカーが必要です。次の 2 つの質問にお答えください。条件に合わない場合は、このページを閉じてください。この確認の答えは、どこにも送信されません。</p>
+        <form id="online-req-form" class="survey-form req-form" autocomplete="off">
+          <fieldset>
+            <legend>カーソルを動かすのに、いま何を使っていますか？</legend>
+            <div class="device-choices">
+              <label class="device-choice"><input type="radio" name="pointerDevice" value="mouse" required>
+                <svg class="device-icon" viewBox="0 0 64 64" aria-hidden="true"><rect x="18" y="6" width="28" height="50" rx="14" fill="#fff" stroke="#333" stroke-width="3"/><line x1="32" y1="6" x2="32" y2="26" stroke="#333" stroke-width="3"/><line x1="18" y1="26" x2="46" y2="26" stroke="#333" stroke-width="3"/><rect x="29.5" y="11" width="5" height="9" rx="2.5" fill="#333"/></svg>
+                <span>マウス（机の上で手で動かす、ボタンの付いた機器）</span></label>
+              <label class="device-choice"><input type="radio" name="pointerDevice" value="touchpad">
+                <svg class="device-icon" viewBox="0 0 64 64" aria-hidden="true"><rect x="12" y="6" width="40" height="24" rx="2" fill="#fff" stroke="#333" stroke-width="3"/><path d="M8 34 H56 L60 58 H4 Z" fill="#fff" stroke="#333" stroke-width="3" stroke-linejoin="round"/><line x1="12" y1="39" x2="52" y2="39" stroke="#999" stroke-width="2"/><line x1="11" y1="43" x2="53" y2="43" stroke="#999" stroke-width="2"/><rect x="24" y="47" width="16" height="8" rx="1.5" fill="#f2c94c" stroke="#333" stroke-width="2"/></svg>
+                <span>ノートパソコンの、キーボードの手前にある平らな板を指でなでる操作</span></label>
+              <label class="device-choice"><input type="radio" name="pointerDevice" value="other">
+                <svg class="device-icon" viewBox="0 0 64 64" aria-hidden="true"><path d="M44 8 L56 20 L24 52 L10 56 L14 42 Z" fill="#fff" stroke="#333" stroke-width="3" stroke-linejoin="round"/><line x1="38" y1="14" x2="50" y2="26" stroke="#333" stroke-width="3"/><path d="M14 42 L24 52" stroke="#333" stroke-width="3"/><path d="M10 56 L12.5 48.5 L17.5 53.5 Z" fill="#333"/></svg>
+                <span>そのほか（トラックボール、ペン、画面に直接さわる操作など）</span></label>
+            </div>
+            <p id="req-pointer-note" class="req-note ng" hidden></p>
+          </fieldset>
+          <fieldset>
+            <legend>音を聞くのに、いま何を使っていますか？</legend>
+            <label><input type="radio" name="audioDevice" value="wired" required> 有線のイヤホンかヘッドホン</label>
+            <label><input type="radio" name="audioDevice" value="speaker"> パソコンのスピーカー</label>
+            <label><input type="radio" name="audioDevice" value="bluetooth"> Bluetooth（無線）のイヤホンかヘッドホン</label>
+            <label><input type="radio" name="audioDevice" value="other"> そのほか</label>
+            <p id="req-audio-note" class="req-note" hidden></p>
+          </fieldset>
+          <div class="row"><button type="submit" class="primary" id="btn-req-next" disabled>次へ（参加の説明を読む）</button></div>
+        </form>
+      </div>
+
+      <div id="online-consent" hidden>
+      <div class="instruction">
         <p>下の説明を読み、内容に同意いただける方だけ、チェックボックスにチェックを入れて「同意して開始」を押してください。途中でやめることもできます。</p>
       </div>
-      <div id="env-check" class="env-check"></div>
-      <div class="row"><button type="button" id="btn-env-recheck" hidden>もう一度確かめる</button></div>
 
       <div id="consent-doc" class="consent-doc" tabindex="0">
         <h2>研究への参加についての説明（同意文書を兼ねます）</h2>
@@ -77,7 +115,7 @@
         <h3>2．お願いする内容</h3>
         <p>画面に、1 から 12 の値が書かれた札が並びます。電子音が鳴った回数を数え、最後の高い音が鳴ったら、同じ値の札を、マウスでできるだけ速く正確にクリックしてください。</p>
         <p>所要時間は約20分です（途中に休憩があります）。練習のあと本番（4部）を行い、最後にいくつかの質問にお答えいただきます。この実験では最大100名を募集します。</p>
-        <p>音を使う課題なので、有線のイヤホンかヘッドホン、またはパソコンのスピーカーをご用意ください。開始前に確認音で音量を調整していただきます。</p>
+        <p>音を使う課題なので、有線のイヤホンかヘッドホン、またはパソコンのスピーカーをご用意ください（Bluetooth〔無線〕のイヤホンやヘッドホンは使えません）。開始前に確認音で音量を調整していただきます。</p>
         <p>練習で正解が 2 回に届かないときは、練習を 1 回ずつ足します。練習の合計が 15 回に達しても届かない場合は、その時点で終了となります。</p>
 
         <h3>3．参加の任意性と撤回</h3>
@@ -96,7 +134,7 @@
           <li>使用環境（OS〔Windows、macOS などの基本ソフトウェア〕、ブラウザの種類、画面の大きさ、入力装置の種類）と、課題のあいだこのページが前面にあったかどうか</li>
           <li>どこまで進んだか（同意、練習、本番、休憩、質問）</li>
           <li>参加者を区別するための識別子（Yahoo!クラウドソーシングの設問に割り当てた英数字の作業者IDと、ブラウザごとに発行される匿名の識別子）</li>
-          <li>この画面でお答えいただく内容（カーソルを動かすのに使うもの、音を聞くのに使うもの）と、最後の質問への回答（すべて任意です）</li>
+          <li>参加の条件の確認でお答えいただいた内容（カーソルを動かすのに使うもの、音を聞くのに使うもの）と、最後の質問への回答（最後の質問への回答はすべて任意です）</li>
         </ul>
         <p>氏名、住所、電話番号、メールアドレスは記録しません。クッキーや閲覧履歴など、他のサイトの情報も取得しません。カメラとマイクは使いません。同意の前には何も送信しません。</p>
 
@@ -129,24 +167,6 @@
       </div>
 
       <form id="online-env-form" class="survey-form" autocomplete="off">
-        <p class="muted">次の 2 つの質問への回答は任意です。答えたくない場合は「答えない」を選ぶか、空欄のままで進めます。</p>
-        <fieldset>
-          <legend>カーソルを動かすのに使うもの（任意）</legend>
-          <label><input type="radio" name="pointerDevice" value="mouse"> マウス</label>
-          <label><input type="radio" name="pointerDevice" value="touchpad"> タッチパッド（トラックパッド）</label>
-          <label><input type="radio" name="pointerDevice" value="other"> そのほか（トラックボール、ペンなど）</label>
-          <label><input type="radio" name="pointerDevice" value="noanswer"> 答えない</label>
-          <p class="muted">できればマウスをお使いください。</p>
-        </fieldset>
-        <fieldset>
-          <legend>音を聞くのに使うもの（任意）</legend>
-          <label><input type="radio" name="audioDevice" value="wired"> 有線のイヤホンまたはヘッドホン</label>
-          <label><input type="radio" name="audioDevice" value="speaker"> パソコンのスピーカー</label>
-          <label><input type="radio" name="audioDevice" value="bluetooth"> Bluetooth（無線）のイヤホンまたはヘッドホン</label>
-          <label><input type="radio" name="audioDevice" value="other"> そのほか</label>
-          <label><input type="radio" name="audioDevice" value="noanswer"> 答えない</label>
-          <p class="muted">Bluetooth のイヤホンは音が遅れて届くので、できるだけ有線のイヤホンかパソコンのスピーカーをお使いください。静かな場所で行ってください。</p>
-        </fieldset>
         <fieldset>
           <legend>ルールの確認</legend>
           <p>電子音が 7 回鳴りました（最後の 7 回目だけが高い音）。どの札を取りますか。</p>
@@ -161,6 +181,7 @@
         </fieldset>
         <div class="row"><button type="submit" class="primary" id="btn-online-start" disabled>同意して開始</button></div>
       </form>
+      </div>
     </section>
 
     <!-- オンラインの流れで、先へ進めないときの画面（二重の参加、練習の打ち切りなど） -->
@@ -280,6 +301,6 @@
   <div id="version-label" class="version-label"></div>
   <div id="test-mode-label" class="test-mode-label" hidden>テストモード</div>
 
-  <script type="module" src="js/main.js?v=0.6.2"></script>
+  <script type="module" src="js/main.js?v=0.6.3"></script>
 </body>
 </html>

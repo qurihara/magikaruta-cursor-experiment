@@ -3,9 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseWid, participantIdFromWid, isMobileEnv, envProblems, practiceDecision, completionDecision, duplicateDecision,
-  restAfter, surveyValue,
+  restAfter, surveyValue, requirementsDecision,
 } from "../js/online.js";
-import { ONLINE, ONLINE_AGE_BANDS, APP_VERSION, INSTRUCTIONS, START_HINTS, PART3_PRACTICE_GUIDE_NOTE, RULES_VIDEO } from "../js/config.js";
+import { ONLINE, ONLINE_AGE_BANDS, APP_VERSION, INSTRUCTIONS, START_HINTS, PART3_PRACTICE_GUIDE_NOTE, RULES_VIDEO, ONLINE_REQUIREMENTS } from "../js/config.js";
 import { existsSync, statSync } from "node:fs";
 import { readFileSync } from "node:fs";
 
@@ -120,11 +120,6 @@ test("同意の画面に、同意のチェックボックスと「同意して�
   const html = read("../index.html");
   assert.match(html, /<input type="checkbox" id="consent-check"[^>]*required/);
   assert.match(html, /<button type="submit" class="primary" id="btn-online-start" disabled>同意して開始<\/button>/);
-  // 同意の画面の申告（ポインタと音の機器）は任意で、「答えない」がある
-  assert.doesNotMatch(html, /name="pointerDevice"[^>]*required/);
-  assert.doesNotMatch(html, /name="audioDevice"[^>]*required/);
-  assert.match(html, /name="pointerDevice" value="noanswer"/);
-  assert.match(html, /name="audioDevice" value="noanswer"/);
 });
 
 test("同意の前に記録を送らない（端末の条件と二重の参加の記録を作らず、起動時に送信先を初期化しない）", () => {
@@ -204,4 +199,66 @@ test("ルール紹介の映像の画面に、読み上げアプリの「読む�
   assert.doesNotMatch(sec, /読み上げアプリ|準備の音/);
   assert.match(sec, /約 23 秒/);
   assert.equal(RULES_VIDEO.durationSec, 23.0);
+});
+
+// ---------- v0.6.3（参加の条件の確認） ----------
+
+test("参加の条件の確認：マウスだけが先へ進め、マウス以外と未回答は進めない", () => {
+  assert.equal(requirementsDecision({ pointerDevice: "mouse", audioDevice: "wired" }).ok, true);
+  for (const p of ["touchpad", "other", "noanswer"]) {
+    const d = requirementsDecision({ pointerDevice: p, audioDevice: "wired" });
+    assert.equal(d.pointer, "not_mouse");
+    assert.equal(d.ok, false);
+  }
+  const m = requirementsDecision({ pointerDevice: null, audioDevice: "wired" });
+  assert.equal(m.pointer, "missing");
+  assert.equal(m.ok, false);
+});
+
+test("参加の条件の確認：Bluetooth と未回答は進めず、有線、スピーカー、そのほかは進める", () => {
+  assert.equal(requirementsDecision({ pointerDevice: "mouse", audioDevice: "bluetooth" }).audio, "bluetooth");
+  assert.equal(requirementsDecision({ pointerDevice: "mouse", audioDevice: "bluetooth" }).ok, false);
+  assert.equal(requirementsDecision({ pointerDevice: "mouse", audioDevice: null }).ok, false);
+  assert.equal(requirementsDecision({ pointerDevice: "mouse", audioDevice: "" }).audio, "missing");
+  assert.equal(requirementsDecision({ pointerDevice: "mouse", audioDevice: "noanswer" }).ok, false);
+  assert.equal(requirementsDecision({ pointerDevice: "mouse", audioDevice: "speaker" }).ok, true);
+  const o = requirementsDecision({ pointerDevice: "mouse", audioDevice: "other" });
+  assert.equal(o.audio, "other");
+  assert.equal(o.ok, true);
+  assert.equal(requirementsDecision({}).ok, false);
+});
+
+test("参加の条件の確認は同意の説明より前にあり、必須で「答えない」が無く、決定どおりの文と選択肢である", () => {
+  const html = read("../index.html");
+  const req = html.indexOf('id="online-requirements"');
+  const doc = html.indexOf('id="consent-doc"');
+  assert.ok(req > 0 && doc > req, "条件の確認が同意の説明より前にない");
+  const sec = html.slice(req, html.indexOf('id="online-consent"'));
+  assert.match(sec, /<legend>カーソルを動かすのに、いま何を使っていますか？<\/legend>/);
+  assert.match(sec, /<legend>音を聞くのに、いま何を使っていますか？<\/legend>/);
+  assert.match(sec, /name="pointerDevice" value="mouse" required/);
+  assert.match(sec, /name="audioDevice" value="wired" required/);
+  assert.doesNotMatch(sec, /noanswer|答えない|任意/);
+  assert.doesNotMatch(html, /タッチパッド|トラックパッド/);
+  assert.match(sec, /マウス（机の上で手で動かす、ボタンの付いた機器）/);
+  assert.match(sec, /ノートパソコンの、キーボードの手前にある平らな板を指でなでる操作/);
+  assert.match(sec, /そのほか（トラックボール、ペン、画面に直接さわる操作など）/);
+  // 3 つの選択肢のそれぞれに SVG の絵がある
+  assert.equal((sec.match(/<svg class="device-icon"/g) || []).length, 3);
+  assert.match(sec, /<button type="submit" class="primary" id="btn-req-next" disabled>/);
+  // 同意の説明の部分は、最初は隠してある
+  assert.match(html, /<div id="online-consent" hidden>/);
+  // 「パソコンからの参加を確認しました」は出さない
+  assert.doesNotMatch(read("../js/main.js"), /パソコンからの参加を確認しました/);
+});
+
+test("参加の条件の確認の案内の文が決定のとおり", () => {
+  assert.equal(ONLINE_REQUIREMENTS.notMouse, "この課題は、マウスを使える方にご参加いただいています。マウスをつないでから、もう一度選んでください。");
+  assert.match(ONLINE_REQUIREMENTS.bluetooth, /有線のイヤホンかパソコンのスピーカーに切り替えてから、もう一度選んでください。$/);
+});
+
+test("最後の質問（アンケート）の「答えない」は残っている", () => {
+  const main = read("../js/main.js");
+  assert.match(main, /value="noanswer"> 答えない/);
+  assert.equal(ONLINE_AGE_BANDS.at(-1).value, "noanswer");
 });

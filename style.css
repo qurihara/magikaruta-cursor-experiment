@@ -208,3 +208,16 @@ input[type="number"], input[type="text"], select {
 @keyframes demo-click { 0% { opacity: 1; transform: scale(0.4); } 100% { opacity: 0; transform: scale(1.6); } }
 .demo-count { text-align: center; font-weight: 700; font-size: 1.05rem; }
 .demo-status { text-align: center; min-height: 3.2em; font-size: 1rem; }
+
+/* オンラインの流れの最初の画面の「参加の条件の確認」（v0.6.3）。カーソルを動かすものの選択肢に小さな絵を添える。 */
+.req-form .device-choices { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.req-form label.device-choice {
+  display: flex; align-items: center; gap: 12px; margin: 0; padding: 6px 10px;
+  border: 1px solid #ddd; border-radius: 6px; background: #fff; cursor: pointer;
+}
+.req-form label.device-choice:has(input:checked) { border-color: var(--accent); background: #eef7f1; }
+.req-form .device-icon { width: 44px; height: 44px; flex: none; }
+.req-form label.device-choice input { flex: none; }
+.req-note { margin: 8px 0 4px; padding: 8px 12px; border-radius: 6px; }
+.req-note.ng { background: #f8e1e1; border: 1px solid #d79a9a; color: #7a1f1f; font-weight: 700; }
+.req-note.info { background: #fff3cd; border: 1px solid #e0c36a; }

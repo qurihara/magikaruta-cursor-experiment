@@ -38,10 +38,29 @@ export function envProblems(env, { minWidth = ONLINE.minInnerWidth, minHeight = 
   const narrow = (env.innerWidth || 0) < minWidth;
   const short = (env.innerHeight || 0) < minHeight;
   const problems = [];
-  if (mobile) problems.push("スマートフォンまたはタブレットと判定されました。この課題はパソコンとマウス（またはタッチパッド）で行います。パソコンで開き直してください。");
+  if (mobile) problems.push("スマートフォンまたはタブレットと判定されました。この課題はパソコンとマウスで行います。パソコンで開き直してください。");
   if (narrow) problems.push(`ブラウザの表示の幅が足りません（いま ${env.innerWidth}px、${minWidth}px 以上が必要です）。ウィンドウを広げてください。`);
   if (short) problems.push(`ブラウザの表示の高さが足りません（いま ${env.innerHeight}px、${minHeight}px 以上が必要です）。全画面表示（Windows は F11、Mac は Control + Command + F）にするか、ウィンドウを広げてください。`);
   return { mobile, narrow, short, problems };
+}
+
+// 最初の画面の「参加の条件の確認」の判定（v0.6.3）。必須で、「答えない」は無い。
+// 返り値は { pointer, audio, ok }。
+//   pointer … "ok"（マウス）、"missing"（未回答）、"not_mouse"（マウス以外。先へ進めない）
+//   audio   … "ok"（有線かパソコンのスピーカー）、"other"（そのほか。進めてよいが記録する）、"bluetooth"（先へ進めない）、
+//             "missing"（未回答）、"invalid"（知らない値。先へ進めない）
+//   ok      … 先へ進めるか
+export function requirementsDecision({ pointerDevice = null, audioDevice = null } = {}) {
+  const p = surveyValue(pointerDevice);
+  const a = surveyValue(audioDevice);
+  const pointer = p === null ? "missing" : p === "mouse" ? "ok" : "not_mouse";
+  let audio;
+  if (a === null) audio = "missing";
+  else if (a === "wired" || a === "speaker") audio = "ok";
+  else if (a === "other") audio = "other";
+  else if (a === "bluetooth") audio = "bluetooth";
+  else audio = "invalid";
+  return { pointer, audio, ok: pointer === "ok" && (audio === "ok" || audio === "other") };
 }
 
 // 練習の記録の並びから、練習を続けるか、合格か、打ち切りかを決める。

@@ -29,15 +29,18 @@
 // v0.6.1。栗原さんの判断 AA1（所要時間を約20分、謝礼を72ポイントにする。index.html の同意の画面）、
 // AA4（第2部で 3 回目にも早く動いたときは、やり直さずに記録して先へ進むが、知らせを出す）、
 // AA5（ルール紹介の映像を、課題の操作に合わせたナレーションの場面に差し替える。video/rules-basic.mp4）に合わせた。
+//
+// v0.6.3。オンラインの流れの最初の画面に「参加の条件の確認」（マウスと音の機器、必須）を、長い同意の説明より前に置いた。
+// マウス以外と Bluetooth を選んだ人は先へ進めない（音の機器は栗原さんの決定 AE1）。端末と画面の条件を満たしているときは何も表示しない。
 // ==========================
 
 import {
   APP_VERSION, GROUPS, MACHINES, INSTRUCTIONS, TIMING, TEST_MODE, ONLINE, AUDIO, ONLINE_AGE_BANDS,
-  PART2_EARLY_MOVE, START_HINTS, PART3_PRACTICE_GUIDE_NOTE, RULES_VIDEO,
+  PART2_EARLY_MOVE, START_HINTS, PART3_PRACTICE_GUIDE_NOTE, RULES_VIDEO, ONLINE_REQUIREMENTS,
 } from "./config.js";
 import {
   parseWid, participantIdFromWid, envProblems, practiceDecision, completionDecision, duplicateDecision,
-  restAfter, surveyValue,
+  restAfter, surveyValue, requirementsDecision,
 } from "./online.js";
 import { buildPlan, splitPlanByPart, PART_ORDER, guideSchedule } from "./design.js";
 import { mountPart3Demo } from "./demo.js";
@@ -1015,6 +1018,10 @@ async function startOnline() {
   document.querySelectorAll(".js-wid").forEach((el) => { el.textContent = WID; });
   $("#ethics-number").textContent = ONLINE.ethicsApprovalNumber ? `（承認番号：${ONLINE.ethicsApprovalNumber}）` : "";
   const box = $("#env-check");
+  const reqSection = $("#online-requirements");
+  const reqForm = $("#online-req-form");
+  const reqNextBtn = $("#btn-req-next");
+  const consentSection = $("#online-consent");
   const form = $("#online-env-form");
   const startBtn = $("#btn-online-start");
   const recheckBtn = $("#btn-env-recheck");
@@ -1022,29 +1029,82 @@ async function startOnline() {
   // 端末の条件で止まったことがあるか。同意の前には送らず、同意したときだけセッションに残す（v0.5.1）。
   const envProblemsBeforeConsent = { narrow: false, short: false };
   let envOk = false;
-  const updateStartButton = () => { startBtn.disabled = !(envOk && consentBox.checked); };
+  let reqOk = false;
+  let reqPassed = false;   // 参加の条件の確認を通ったか（通ったあとは条件の確認を隠したままにする）
+  const updateButtons = () => {
+    reqNextBtn.disabled = !(envOk && reqOk);
+    startBtn.disabled = !(envOk && consentBox.checked);
+  };
+  // v0.6.3: 端末と画面の条件を満たしているときは何も表示しない。満たしていないとき（スマートフォン、タブレット、狭い画面）だけ案内を出す。
   const check = () => {
     const env = collectEnv();
     const r = envProblems(env);
     envOk = r.problems.length === 0;
     if (envOk) {
-      box.className = "env-check ok";
-      box.innerHTML = "<p>パソコンからの参加を確認しました。</p>";
+      box.hidden = true;
+      box.className = "env-check";
+      box.innerHTML = "";
     } else {
+      box.hidden = false;
       box.className = "env-check ng";
       box.innerHTML = r.problems.map((p) => `<p>${p}</p>`).join("");
       if (r.narrow) envProblemsBeforeConsent.narrow = true;
       if (r.short) envProblemsBeforeConsent.short = true;
     }
-    form.hidden = r.mobile;          // スマートフォンとタブレットは、開き直す以外に解決できない
+    // スマートフォンとタブレットは、開き直す以外に解決できないので、条件の確認も同意の説明も出さない
+    reqSection.hidden = r.mobile || reqPassed;
+    form.hidden = r.mobile;
     recheckBtn.hidden = envOk || r.mobile;
-    updateStartButton();
+    updateButtons();
     return envOk;
   };
-  consentBox.addEventListener("change", updateStartButton);
+  consentBox.addEventListener("change", updateButtons);
   check();
   window.addEventListener("resize", check);
   recheckBtn.addEventListener("click", check);
+
+  // v0.6.3: 参加の条件の確認（マウスと音の機器）。長い同意の説明より前に置き、条件に合う答えを選ぶまで先へ進めない。
+  // 必須で「答えない」は無い。選んだ順の履歴（選び直しを含む）は、同意したときだけセッションの online.requirementSelections に残す。
+  // 条件に合わないまま閉じた人の記録は作らない（同意の前には何も送信しない、v0.5.1 の決まり）。
+  const requirementSelections = { pointerDevice: [], audioDevice: [] };
+  const setNote = (el, text, cls) => {
+    el.hidden = !text;
+    el.textContent = text || "";
+    el.className = `req-note ${cls || ""}`.trim();
+  };
+  const renderRequirements = () => {
+    const fd = new FormData(reqForm);
+    const d = requirementsDecision({ pointerDevice: fd.get("pointerDevice"), audioDevice: fd.get("audioDevice") });
+    setNote($("#req-pointer-note"), d.pointer === "not_mouse" ? ONLINE_REQUIREMENTS.notMouse : "", "ng");
+    setNote($("#req-audio-note"),
+      d.audio === "bluetooth" ? ONLINE_REQUIREMENTS.bluetooth : d.audio === "other" ? ONLINE_REQUIREMENTS.otherAudio : "",
+      d.audio === "bluetooth" ? "ng" : "info");
+    reqOk = d.ok;
+    updateButtons();
+    return d;
+  };
+  reqForm.addEventListener("change", (ev) => {
+    const name = ev.target && ev.target.name;
+    if (name && requirementSelections[name]) requirementSelections[name].push(ev.target.value);
+    renderRequirements();
+  });
+  renderRequirements();
+  const requirements = await new Promise((resolve) => {
+    const onSubmit = (ev) => {
+      ev.preventDefault();
+      if (!check()) return;
+      const d = renderRequirements();
+      if (!d.ok) return;
+      reqForm.removeEventListener("submit", onSubmit);
+      const fd = new FormData(reqForm);
+      resolve({ pointerDevice: fd.get("pointerDevice"), audioDevice: fd.get("audioDevice"), passedAt: new Date().toISOString() });
+    };
+    reqForm.addEventListener("submit", onSubmit);
+  });
+  reqPassed = true;
+  reqSection.hidden = true;
+  consentSection.hidden = false;
+  window.scrollTo(0, 0);
 
   let quizAttempts = 0;
   const answers = await new Promise((resolve) => {
@@ -1061,8 +1121,8 @@ async function startOnline() {
         return;
       }
       form.removeEventListener("submit", onSubmit);
-      // 申告は任意（v0.5.1）。未回答は null、「答えない」は noanswer。
-      resolve({ pointerDevice: surveyValue(fd.get("pointerDevice")), audioDevice: surveyValue(fd.get("audioDevice")) });
+      // v0.6.3: 機器の答えは、この画面の前の参加の条件の確認（必須）で得たものを使う（v0.5.1 から v0.6.2 では、この画面の任意の申告だった）。
+      resolve({ pointerDevice: requirements.pointerDevice, audioDevice: requirements.audioDevice });
     };
     form.addEventListener("submit", onSubmit);
   });
@@ -1082,8 +1142,12 @@ async function startOnline() {
     sessionId: onlineSessionId(),
     online: {
       wid: WID,
+      // v0.6.3: 参加の条件の確認の答え。pointerDevice は必ず mouse、audioDevice は wired、speaker、other のどれか。
+      // requirementSelections は選んだ順の履歴（選び直しを含む）、requirementsPassedAt は条件の確認を通った時刻。
       pointerDevice: answers.pointerDevice,
       audioDevice: answers.audioDevice,
+      requirementSelections,
+      requirementsPassedAt: requirements.passedAt,
       quizAttempts,
       consentedAt,
       // 同意の取り方（v0.5.1）。チェックボックスにチェックを入れて「同意して開始」を押した。
