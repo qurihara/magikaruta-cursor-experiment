@@ -912,13 +912,21 @@ async function showDone() {
       // 承認済みの説明文書の「9．記録の削除の請求」と「10．連絡先」に合わせ、削除の請求の宛先と、添えてもらう作業者IDも出す。
       const deletion = `<p class="muted">参加後に記録の削除を希望する場合は、参加した日時と、作業者ID（${WID}）を添えて、${ONLINE.contactEmail} までメールでご連絡ください。</p>`;
       codeBox.innerHTML = (st === "finished"
-        ? `<p>完了コード</p><p class="code">${ONLINE.completionCode}</p><p>Yahoo!クラウドソーシングの設問の画面に戻り、この 3 桁の数字を 1 桁ずつ選んでください。下の送信の表示が「すべて送信済み」になってから、このページを閉じてください。</p>`
+        ? `<p>完了コード</p><p class="code">${ONLINE.completionCode}</p><p>Yahoo!クラウドソーシングの設問の画面に戻り、この 3 桁の数字を 1 桁ずつ選んでください。下に「記録の送信が完了しました」と出てから、このページを閉じてください。</p>`
         : `<p>時間切れの回が多かったため、完了コードは表示されません。</p>`) + deletion;
     } else {
       codeBox.hidden = true;
     }
+    if (ONLINE_MODE) {
+      // v0.6.4: 参加者には送信先の名前や件数を見せず、済んだか、まだかだけを知らせる（栗原さんの Y11 の指摘）。
+      $("#done-status").innerHTML = allSent
+        ? "<p><strong>記録の送信が完了しました。</strong>このページを閉じてかまいません。</p>"
+        : "<p>記録を送信しています。このページを閉じずに、しばらくお待ちください。</p>";
+      $("#btn-done-resend").hidden = allSent || !state.doneResendVisible;
+      return allSent;
+    }
     $("#done-status").innerHTML = [
-      ONLINE_MODE ? `<p>記録 ${trials.length} 件をこのブラウザに保存しました。</p>` : `<p>参加者番号 ${state.session.participantId}。試行 ${trials.length} 件をこの PC に保存しました。</p>`,
+      `<p>参加者番号 ${state.session.participantId}。試行 ${trials.length} 件をこの PC に保存しました。</p>`,
       enabled
         ? `<p>${uploadTargetLabel()} への送信: 試行 ${sent} / ${trials.length} 件、セッションの記録（アンケートを含む）${sessionSent ? "送信済み" : "未送信"}` +
           `${allSent ? "（すべて送信済み）" : "（未送信があります。回線がつながってから「再送」を押してください）"}。</p>`
@@ -932,11 +940,16 @@ async function showDone() {
   if (ONLINE_MODE) {
     // オンラインの流れでは運営者の画面へ戻らない。送信の状況を数秒ごとに表示し直し、未送信が残れば再送する。
     $("#btn-done-operator").hidden = true;
+    resendBtn.textContent = "送信をやり直す";
+    state.doneResendVisible = false;
+    resendBtn.hidden = true;
+    await render();
     let tries = 0;
     const timer = setInterval(async () => {
       tries++;
       const unsent = (await loadTrialsForSession(state.session.sessionId)).some((t) => !t.sent);
       if (unsent && tries % 3 === 0) await resendUnsent();
+      if (tries >= 10) state.doneResendVisible = true; // 30 秒たっても終わらないときだけ、やり直しのボタンを出す
       await render();
       if (tries > 60) clearInterval(timer);
     }, 3000);
