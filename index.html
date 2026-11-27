@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>まじかるた 収集B</title>
+  <title>数字のカードを選ぶ課題</title>
   <link rel="stylesheet" href="style.css">
   <!-- Firebase の設定。送信先は js/upload-config.js で選ぶ（v0.3.0 から既定は Firebase）。?v= は、ブラウザに残った古い設定のファイルを使わせないための版の印で、設定を変えたら上げる。 -->
-  <script src="js/firebase-config.js?v=0.6.4"></script>
+  <script src="js/firebase-config.js?v=0.7.0"></script>
 </head>
 <body>
   <div id="app">
@@ -60,9 +60,10 @@
          この確認は最後の質問（任意）ではなく参加の条件なので、必須で「答えない」は無い。マウス以外と Bluetooth を選んだ人は先へ進めない。
          端末と画面の条件を満たしているときは何も表示せず、満たしていないときだけ案内を出す。条件の確認で止まった人の記録は作らない（同意の前には何も送信しない）。 -->
     <section id="screen-online-start" class="screen">
-      <h1>まじかるたの課題（パソコンで約20分）</h1>
+      <!-- v0.7.0: かるたの知識がなくても分かる説明にした（栗原さんの指摘。「まじかるた」の名前と、かるたのルールを前提にした言い方を教示から外し、画面の数字を「カード」と呼ぶ）。 -->
+      <h1>数字のカードを選ぶ課題（パソコンで約20分）</h1>
       <div class="instruction">
-        <p>この課題では、電子音の回数で札を取る遊び「まじかるた」を、パソコンの画面の上でマウスを使って行います。かかる時間は約20分です。</p>
+        <p>画面に、数字が書かれたカードが並びます。電子音が何回か鳴るので、その回数と同じ数字のカードをマウスでクリックする課題です。かかる時間は約20分です。</p>
       </div>
       <div id="env-check" class="env-check" hidden></div>
       <div class="row"><button type="button" id="btn-env-recheck" hidden>もう一度確かめる</button></div>
@@ -169,11 +170,17 @@
       <form id="online-env-form" class="survey-form" autocomplete="off">
         <fieldset>
           <legend>ルールの確認</legend>
-          <p>電子音が 7 回鳴りました（最後の 7 回目だけが高い音）。どの札を取りますか。</p>
-          <label><input type="radio" name="quiz" value="6" required> 6 の札</label>
-          <label><input type="radio" name="quiz" value="7"> 7 の札</label>
-          <label><input type="radio" name="quiz" value="8"> 8 の札</label>
+          <p>問1　電子音が 7 回鳴りました（最後の 7 回目だけが高い音）。どのカードをクリックしますか。</p>
+          <label><input type="radio" name="quiz" value="6" required> 6 のカード</label>
+          <label><input type="radio" name="quiz" value="7"> 7 のカード</label>
+          <label><input type="radio" name="quiz" value="8"> 8 のカード</label>
           <p id="quiz-feedback" class="notice" hidden></p>
+          <!-- v0.7.0: 正解が画面のカードのどれかであり、1つに決まったら待たずにクリックしてよいことを確かめる問い（栗原さんの決定）。 -->
+          <p>問2　1、2、5、12 のカードが並んでいます。低い音が 5 回鳴って、まだ続いています。どのカードが正解ですか。</p>
+          <label><input type="radio" name="quiz2" value="5" required> 5 のカード</label>
+          <label><input type="radio" name="quiz2" value="6"> 6 のカード</label>
+          <label><input type="radio" name="quiz2" value="12"> 12 のカード</label>
+          <p id="quiz2-feedback" class="notice" hidden></p>
         </fieldset>
         <fieldset class="consent-box">
           <legend>同意の確認</legend>
@@ -200,11 +207,14 @@
 
     <!-- 2. 参加者への説明と音量の確認 -->
     <section id="screen-intro" class="screen">
-      <h1>まじかるた</h1>
+      <!-- v0.7.0: かるたの知識を前提にしない説明にし、正解が画面のカードのどれかであることと、1つに決まったら待たずにクリックしてよいことを例で示した（栗原さんの決定）。 -->
+      <h1>課題のやり方</h1>
       <div class="instruction">
-        <p>画面に、1 から 12 の値が書かれた札が並びます。読み手の代わりに電子音が鳴ります。電子音の回数が、読まれる札の値です。最後の音だけ高い音で、そこで終わりだと分かります。</p>
-        <p>たとえば音が 7 回鳴れば（最後の 7 回目だけ高い音）、7 の札を取ります。</p>
-        <p>各回は、画面の下にある「開始」のボタンをクリックすると始まります。しばらくすると電子音が始まります。</p>
+        <p>画面に、1 から 12 までの数字が書かれたカードが、いくつか並びます。</p>
+        <p>各回は、画面の下にある「開始」のボタンをクリックすると始まります。少し待つと、電子音が何回か鳴ります。鳴った回数が、正解の数字です。最後の 1 回だけ高い音になるので、高い音が鳴ったら、そこで音が終わったと分かります。</p>
+        <p>たとえば、低い音が 6 回鳴ったあと、7 回目に高い音が鳴ったら、正解は 7 です。7 のカードをクリックしてください。</p>
+        <p>正解は、必ず画面に並んでいるカードのどれかです。画面にないカードの数字が正解になることはありません。</p>
+        <p>たとえば、1、2、5、12 のカードが並んでいるとします。低い音が 5 回鳴ってまだ続いていれば、正解は 6 以上の数字なので、12 しかありません。このように正解が 1 つに決まったら、最後の高い音を待たずに 12 をクリックしてかまいません。</p>
         <p>まず、音が聞こえることを確かめてください。</p>
       </div>
       <div class="row">
@@ -218,7 +228,7 @@
          v0.6.1（AA5）で、映像を課題の操作（「開始」を押すと、少し待ってから電子音が鳴る）に合わせた場面に差し替え、
          映像の中の「読む」のボタンと準備の音が読み上げアプリのものだという注記を外した。 -->
     <section id="screen-video" class="screen">
-      <h1>遊び方の基本</h1>
+      <h1>課題の基本</h1>
       <div class="instruction">
         <p>はじめに、短い映像（約 23 秒、音が出ます）で、電子音の聞き方を見てください。</p>
       </div>
@@ -277,7 +287,7 @@
           <label><input type="radio" name="handedness" value="both"> 両方</label>
         </fieldset>
         <fieldset>
-          <legend>まじかるたを遊んだことがありますか</legend>
+          <legend>まじかるた（電子音の回数で札を取る、かるたの遊び）を遊んだことがありますか</legend>
           <label><input type="radio" name="playedMajikaruta" value="yes" required> ある</label>
           <label><input type="radio" name="playedMajikaruta" value="no"> ない</label>
         </fieldset>
@@ -301,6 +311,6 @@
   <div id="version-label" class="version-label"></div>
   <div id="test-mode-label" class="test-mode-label" hidden>テストモード</div>
 
-  <script type="module" src="js/main.js?v=0.6.4"></script>
+  <script type="module" src="js/main.js?v=0.7.0"></script>
 </body>
 </html>

@@ -154,19 +154,40 @@ test("第2部で早く動いてやり直した回の記録は、完了コード�
   assert.equal(d.answered, 7);
 });
 
-test("教示の文が決定のとおり（I1、I3、I4、I5、I6、I8、I9）", () => {
-  assert.equal(START_HINTS.all, "札の配置を覚えたら、開始を押してください");
+test("教示の文が決定のとおり（I1、I3、I4、I5、I6、I8、I9。v0.7.0 でカードの言い方に直した）", () => {
+  assert.equal(START_HINTS.all, "カードの並びを覚えたら、開始を押してください");
   assert.equal(START_HINTS.part2, "開始ボタンの真ん中あたりを押してください");
-  assert.match(INSTRUCTIONS.part1, /正しい札が分かったら、最後の高い音を待たずにクリックしてもかまいません。$/);
-  assert.equal(INSTRUCTIONS.part2, "開始を押したら、カーソルを開始ボタンの上に置いたまま待ち、最後の高い音が聞こえたら札へ動かしてください。");
+  assert.match(INSTRUCTIONS.part1, /1、2、5、12 の例のように）、最後の高い音を待たずにクリックしてもかまいません。$/);
+  assert.equal(INSTRUCTIONS.part2, "開始を押したら、カーソルを開始ボタンの上に置いたまま待ち、最後の高い音が聞こえたらカードへ動かしてください。");
   assert.equal(INSTRUCTIONS.part3[0], "第3部では、次の動き方を試していただきます。");
-  assert.equal(INSTRUCTIONS.part3[1], "開始を押したら、最初の音が鳴る前から、いちばん小さい数字の札の上で待ってかまいません。");
-  assert.match(INSTRUCTIONS.part3[2], /^1\. /);
-  assert.match(INSTRUCTIONS.part3[3], /^2\. /);
-  assert.match(INSTRUCTIONS.part3[4], /^3\. /);
-  assert.equal(INSTRUCTIONS.part3.length, 6);
-  assert.equal(INSTRUCTIONS.part4.join(""), "ここからは、どの動き方でもかまいません。第2部のように最後の高い音を聞いてから動いても、第3部のように候補の札の上で待ちながら動いても、それ以外の動き方でもかまいません。正しい札を、できるだけ早くクリックしてください。正しい札が分かったら、最後の高い音を待たずにクリックしてもかまいません。");
-  assert.equal(PART3_PRACTICE_GUIDE_NOTE, "練習の目印：いま乗せるべき札を光らせています。光っている札にカーソルを移してください（本番では光りません）");
+  assert.match(INSTRUCTIONS.part3[1], /^音が 1 回鳴るごとに、正解の可能性が残っているカードは減っていきます。/);
+  assert.equal(INSTRUCTIONS.part3[2], "開始を押したら、最初の音が鳴る前から、いちばん小さい数字のカードの上で待ってかまいません。");
+  assert.match(INSTRUCTIONS.part3[3], /^1\. /);
+  assert.match(INSTRUCTIONS.part3[4], /^2\. /);
+  assert.match(INSTRUCTIONS.part3[5], /^3\. /);
+  assert.equal(INSTRUCTIONS.part3.length, 7);
+  assert.equal(INSTRUCTIONS.part4.join(""), "ここからは、どの動き方でもかまいません。第2部のように最後の高い音を聞いてから動いても、第3部のように正解の可能性が残っているカードの上で待ちながら動いても、それ以外の動き方でもかまいません。正解のカードを、できるだけ早くクリックしてください。正解が分かったら、最後の高い音を待たずにクリックしてもかまいません。");
+  assert.equal(PART3_PRACTICE_GUIDE_NOTE, "練習の目印：いまカーソルを乗せるカードを光らせています。光っているカードにカーソルを移してください（本番では光りません）");
+});
+
+// ---------- v0.7.0（かるたの知識を前提にしない教示、栗原さんの指摘と決定） ----------
+
+test("教示の文と画面の文に、かるたを前提にした言い方（札、お手つき、読まれる、まじかるた）が残っていない", () => {
+  const texts = [START_HINTS.all, PART3_PRACTICE_GUIDE_NOTE, INSTRUCTIONS.part1, INSTRUCTIONS.part2, ...INSTRUCTIONS.part3, ...INSTRUCTIONS.part4];
+  for (const t of texts) assert.doesNotMatch(t, /札|お手つき|読ま|まじかるた/, t);
+  const html = read("../index.html");
+  // 承認済みの参加者説明文書（同意の画面の consent-doc）と、最後の質問の「まじかるたを遊んだことがありますか」は変えないので、除いて調べる。
+  const noConsent = html.slice(0, html.indexOf('<div id="consent-doc"')) + html.slice(html.indexOf('<form id="online-env-form"'), html.indexOf('<section id="screen-survey"'));
+  const visible = noConsent.replace(/<!--[\s\S]*?-->/g, "").replace(/<section id="screen-operator"[\s\S]*?<\/section>/, "");
+  assert.doesNotMatch(visible, /札|お手つき|読まれ|読み手|まじかるた/);
+  assert.match(html, /<title>数字のカードを選ぶ課題<\/title>/);
+  assert.match(html, /<h1>課題のやり方<\/h1>/);
+  assert.match(html, /正解は、必ず画面に並んでいるカードのどれかです。/);
+  assert.match(html, /1、2、5、12 のカードが並んでいるとします。/);
+  assert.match(html, /name="quiz2" value="12"/);
+  const main = read("../js/main.js");
+  assert.match(main, /board\.showFeedback\("不正解", "miss"\)/);
+  assert.match(main, /quiz2Attempts,/);
 });
 
 test("ルール紹介の映像のファイルがあり、GitHub Pages で配信できる大きさ（5MB 未満）で、映像の画面が index.html にある", () => {
@@ -182,7 +203,7 @@ test("ルール紹介の映像のファイルがあり、GitHub Pages で配信�
 
 test("同意の画面の所要時間は約20分、謝礼は72ポイントで、古い値（約15分、54ポイント）が残っていない", () => {
   const html = read("../index.html");
-  assert.match(html, /<h1>まじかるたの課題（パソコンで約20分）<\/h1>/);
+  assert.match(html, /<h1>数字のカードを選ぶ課題（パソコンで約20分）<\/h1>/);
   assert.match(html, /かかる時間は約20分です。/);
   assert.match(html, /所要時間は約20分です（途中に休憩があります）。/);
   assert.match(html, /72 ポイントをお支払いします。/);

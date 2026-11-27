@@ -443,7 +443,7 @@ async function runPracticeGate(planned) {
     if (!announced) {
       await showMessage("練習をもう少し続けます", [
         `正解が ${ONLINE.practicePassCorrect} 回になると、本番に進みます。`,
-        "電子音の回数を数え、最後の高い音が鳴ったら、その数の札をクリックしてください。",
+        "電子音の回数を数え、最後の高い音が鳴ったら、その数字のカードをクリックしてください。",
       ]);
       announced = true;
     }
@@ -493,7 +493,7 @@ async function showPartInstruction(key, remaining) {
   switch (key) {
     case "practice":
       return showMessage("練習", [
-        `まず練習です。音の間隔は ${formatT(remaining[0].t)} で、${n} 回行います。`,
+        `まず練習です。音の間隔は ${formatT(remaining[0].t)}で、${n} 回行います。`,
         INSTRUCTIONS.part1,
       ]);
     case "part1":
@@ -513,12 +513,12 @@ async function showPartInstruction(key, remaining) {
       // v0.6.0（I5）。教示の文を段落に分け、動きの見本を添える。
       return showMessage("第3部", [
         ...INSTRUCTIONS.part3,
-        `まず、音の間隔 ${formatT(remaining[0].t)} で ${n} 回の練習を行います。練習では、いま乗せるべき札を光らせて示します。`,
+        `まず、音の間隔 ${formatT(remaining[0].t)}で、${n} 回の練習を行います。練習では、いまカーソルを乗せるカードを光らせて示します。`,
       ], demo);
     case "part3":
       return showMessage("第3部 本番", [
         ...INSTRUCTIONS.part3,
-        "音の間隔は、まとまりごとに変わります。まとまりの最初に音の間隔をお知らせし、1 回の練習のあと、本番を行います。本番では札は光りません。",
+        "音の間隔は、まとまりごとに変わります。まとまりの最初に音の間隔をお知らせし、1 回の練習のあと、本番を行います。本番ではカードは光りません。",
       ], demo);
     case "part4":
       // v0.6.0（I9）。
@@ -583,9 +583,11 @@ async function runPart2Trial(trial, meta) {
 function progressText(trial, { key, totalBlocks }, attempt = 0) {
   const partLabel = PART_TITLES[key] || key;
   const blockLabel = totalBlocks > 1 ? `　まとまり ${trial.blockIndex + 1}/${totalBlocks}` : "";
-  const kind = trial.isPractice ? (trial.extraPractice ? `練習 ${trial.trialIndex}` : "練習") : `試行 ${trial.trialIndex}`;
+  // v0.7.0: 部の名前が「練習」のときに「練習　練習」と重ならないよう、練習の回は回数だけを出す。
+  const kind = trial.isPractice ? (key === "practice" ? `${trial.trialIndex} 回目` : "練習") : `${trial.trialIndex} 回目`;
   const retry = attempt > 0 ? `（やり直し ${attempt}）` : "";
-  return `${partLabel}${blockLabel}　${kind}${retry}　t = ${trial.t} s　配置 ${trial.layoutId}${TEST ? `　読み ${trial.target}` : ""}`;
+  // v0.7.0: 参加者に意味の分からない「t」と「配置」をやめ、音の間隔を言葉で出す。配置の番号と正解は、テストモードでだけ出す。
+  return `${partLabel}${blockLabel}　${kind}${retry}　音の間隔 ${formatT(trial.t)}${TEST ? `　配置 ${trial.layoutId}　正解 ${trial.target}` : ""}`;
 }
 
 // 第3部の練習で、いま乗るべき札（候補のうち最小の値）を音に合わせて示す。
@@ -781,7 +783,7 @@ async function runTrial(trial, meta, { attempt = 0 } = {}) {
     board.showFeedback("正解", "ok");
     board.markResult(record.click.card, trial.target);
   } else {
-    board.showFeedback("お手つき", "miss");
+    board.showFeedback("不正解", "miss");
     board.markResult(record.click.card, trial.target);
   }
 
@@ -1120,6 +1122,7 @@ async function startOnline() {
   window.scrollTo(0, 0);
 
   let quizAttempts = 0;
+  let quiz2Attempts = 0;
   const answers = await new Promise((resolve) => {
     const onSubmit = (ev) => {
       ev.preventDefault();
@@ -1130,9 +1133,19 @@ async function startOnline() {
       const fb = $("#quiz-feedback");
       if (fd.get("quiz") !== "7") {
         fb.hidden = false;
-        fb.textContent = "違います。音の回数が、取る札の値です。もう一度選んでください。";
+        fb.textContent = "問1が違います。鳴った回数が、正解の数字です。もう一度選んでください。";
         return;
       }
+      fb.hidden = true;
+      // v0.7.0: 問2（正解が画面のカードのどれかで、1 つに決まったら待たずにクリックしてよいこと）。
+      quiz2Attempts++;
+      const fb2 = $("#quiz2-feedback");
+      if (fd.get("quiz2") !== "12") {
+        fb2.hidden = false;
+        fb2.textContent = "問2が違います。正解は、画面に並んでいるカードのどれかです。低い音が 5 回鳴ってまだ続いていれば、正解は 6 以上です。もう一度選んでください。";
+        return;
+      }
+      fb2.hidden = true;
       form.removeEventListener("submit", onSubmit);
       // v0.6.3: 機器の答えは、この画面の前の参加の条件の確認（必須）で得たものを使う（v0.5.1 から v0.6.2 では、この画面の任意の申告だった）。
       resolve({ pointerDevice: requirements.pointerDevice, audioDevice: requirements.audioDevice });
@@ -1162,6 +1175,7 @@ async function startOnline() {
       requirementSelections,
       requirementsPassedAt: requirements.passedAt,
       quizAttempts,
+      quiz2Attempts,
       consentedAt,
       // 同意の取り方（v0.5.1）。チェックボックスにチェックを入れて「同意して開始」を押した。
       consent: { method: "checkbox_and_button", checked: true, at: consentedAt },

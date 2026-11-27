@@ -24,7 +24,7 @@ export function mountPart3Demo(container, { rows = PART3_DEMO.rows, target = PAR
   const wrap = document.createElement("div");
   wrap.className = "demo";
   wrap.innerHTML = `
-    <div class="demo-title">動き方の見本（札 ${values.join("、")} の場で、${target} が読まれる場合。音の間隔 ${t} 秒）</div>
+    <div class="demo-title">動き方の見本（カード ${values.join("、")} が並び、正解が ${target} の場合。音の間隔 ${t} 秒）</div>
     <div class="demo-board"></div>
     <div class="demo-count"></div>
     <div class="demo-status" aria-live="polite"></div>
@@ -78,7 +78,7 @@ export function mountPart3Demo(container, { rows = PART3_DEMO.rows, target = PAR
   const play = () => {
     reset();
     countEl.textContent = "音：まだ鳴っていません";
-    statusEl.textContent = `開始を押したところです。最初の音が鳴る前から、いちばん小さい ${Math.min(...values)} の上で待ちます。`;
+    statusEl.textContent = `開始を押したところです。最初の音が鳴る前から、いちばん小さい ${Math.min(...values)} のカードの上で待ちます。`;
     const tones = scheduleTones({ count: target, t, delayMs: 1200 });
     const schedule = guideSchedule({ values, target, toneTimesPerf: tones.toneTimesPerf, t });
     // 自動の確認のために、直前の見本の音の時刻と切り替えの時刻を公開する。
@@ -101,9 +101,9 @@ export function mountPart3Demo(container, { rows = PART3_DEMO.rows, target = PAR
         if (last) {
           cursor.classList.add("clicking");
           cardEls.get(step.value).el.classList.add("clicked");
-          statusEl.textContent = `${step.k} 回目の高い音が鳴ったので、乗っている ${step.value} の札をクリックします。`;
+          statusEl.textContent = `${step.k} 回目の高い音が鳴ったので、乗っている ${step.value} のカードをクリックします。`;
         } else if (step.value !== prev) {
-          statusEl.textContent = `${step.k} 回目も低い音だったので、${prev} は読まれていません。次に小さい ${step.value} へ移ります。`;
+          statusEl.textContent = `${step.k} 回目も低い音だったので、${prev} は正解ではありません。次に小さい ${step.value} のカードへ移ります。`;
         }
       }, Math.max(0, step.atPerf - performance.now())));
     }
