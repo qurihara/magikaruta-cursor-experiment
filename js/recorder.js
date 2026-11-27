@@ -266,7 +266,9 @@ export function earlyLeaveFromStart(path, rect, lastTonePerf, click = null) {
 
 // 第2部の 1 回の試行のあとで、やり直すか、記録して先へ進むかを決める。
 // attempt はその試行の何回目か（0 が最初、1 が 1 回目のやり直し）。早く動いて、まだやり直しが maxRetries 回に達していなければ "retry"。
-// 早く動かなかったとき、または早く動いてもやり直しが上限に達したとき（maxRetries = 2 なら 3 回目）は "record"。
+// 早く動いたが、やり直しが上限に達したとき（maxRetries = 2 なら 3 回目）は "record_early"（記録して先へ進み、知らせを出す。v0.6.1、AA4）。
+// 早く動かなかったときは "record"。
 export function part2AttemptDecision({ early, attempt, maxRetries }) {
-  return early && attempt < maxRetries ? "retry" : "record";
+  if (!early) return "record";
+  return attempt < maxRetries ? "retry" : "record_early";
 }

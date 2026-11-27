@@ -182,3 +182,26 @@ test("ルール紹介の映像のファイルがあり、GitHub Pages で配信�
   assert.match(html, /<section id="screen-video" class="screen">/);
   assert.match(html, /id="btn-video-next"/);
 });
+
+// ---------- v0.6.1（AA1） ----------
+
+test("同意の画面の所要時間は約20分、謝礼は72ポイントで、古い値（約15分、54ポイント）が残っていない", () => {
+  const html = read("../index.html");
+  assert.match(html, /<h1>まじかるたの課題（パソコンで約20分）<\/h1>/);
+  assert.match(html, /かかる時間は約20分です。/);
+  assert.match(html, /所要時間は約20分です（途中に休憩があります）。/);
+  assert.match(html, /72 ポイントをお支払いします。/);
+  assert.doesNotMatch(html, /15分|15 分|54 ?ポイント/);
+  assert.equal(ONLINE.timeLimitMinutes, 60);
+});
+
+// ---------- v0.6.1（AA5） ----------
+
+test("ルール紹介の映像の画面に、読み上げアプリの「読む」のボタンと準備の音についての注記が残っていない", () => {
+  const html = read("../index.html");
+  const sec = html.slice(html.indexOf('<section id="screen-video"'), html.indexOf("</section>", html.indexOf('<section id="screen-video"')));
+  assert.ok(sec.length > 0);
+  assert.doesNotMatch(sec, /読み上げアプリ|準備の音/);
+  assert.match(sec, /約 23 秒/);
+  assert.equal(RULES_VIDEO.durationSec, 23.0);
+});

@@ -7,7 +7,7 @@
 // ==========================
 
 // アプリの版の数字。直したら必ず上げる。画面の右下に出す。
-export const APP_VERSION = "v0.6.0";
+export const APP_VERSION = "v0.6.1";
 
 // 電子音の間隔 t の5水準（秒）。参加者内の要因。
 // v0.6.0 で 1.6 秒をやめて 0.6 秒を足した（栗原さんの通しの確認 Y11 のあとの決定）。予測の表で、値が隣り合う札への
@@ -32,9 +32,11 @@ export const PART4_T_LEVELS = [0.4, 0.8];
 // 第2部の早い動きの判定（v0.6.0、I4）。最後の高い音の予定の時刻より前に、カーソルが開始ボタンの四角の外へ出た試行は、
 // 試行のあとに知らせて、同じ試行をやり直す。やり直しは maxRetries 回までとし、その次の回（3 回目の試行）は、
 // 早く動いてもそのまま記録して先へ進む。やり直した回の記録も、文書 ID の末尾に _early1、_early2 を付けて残す。
+// v0.6.1（AA4）。3 回目にも早く動いたときは、やり直さずに記録して先へ進むが、finalNotice の知らせを出す（「次へ」で進む）。
 export const PART2_EARLY_MOVE = {
   maxRetries: 2,
   notice: "最後の高い音が鳴る前に、開始ボタンから離れました。高い音を聞いてから動かしてください。",
+  finalNotice: "最後の高い音が鳴る前に動きました。次の試行では、高い音を聞いてから動かしてください。",
 };
 
 // 開始ボタンのそばに出す案内（v0.6.0、I1 と I4）。開始のあとの無作為の待ち（TIMING.waitMinMs〜waitMaxMs）は変えない。
@@ -51,10 +53,12 @@ export const PART3_PRACTICE_GUIDE_NOTE = "練習の目印：いま乗せるべ�
 export const PART3_DEMO = { rows: [[5, 6, 7, 8]], target: 7, t: 0.8 };
 
 // 最初の練習の前に見せる、ルール紹介の映像の基本の部分（v0.6.0、I3）。
-// majikaruta-reader/video/magikaruta-rules.mp4 の 18.0 秒から 41.05 秒（場面 s03「音の聞き方」）を切り出し、960×540 に縮めた。
+// v0.6.0 では majikaruta-reader/video/magikaruta-rules.mp4 の 18.0 秒から 41.05 秒（場面 s03「音の聞き方」）を切り出していた。
+// v0.6.1（AA5）で、demo-video の作品 majikaruta-rules-task の場面 s03task（s03 のナレーションと図を課題の操作に合わせた変種。
+// 「開始」を押すと、少し待ってから電子音が鳴る。準備の音と「読む」のボタンは無い）を書き出し、960×540 に縮めたものに替えた。
 export const RULES_VIDEO = {
   src: "video/rules-basic.mp4",
-  durationSec: 23.1,
+  durationSec: 23.0,
 };
 
 // 1ブロックの試行数（配置の数と同じ）。

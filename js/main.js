@@ -25,6 +25,10 @@
 // 両方の流れで同じに動く。I1 は開始ボタンのそばの案内、I3 は最初の練習の前のルール紹介の映像と第1部の教示、
 // I4 は第2部の早い動きの判定とやり直し、I5 は第3部の教示と動きの見本（demo.js）、I6 は第3部の練習のハイライトの時刻と説明、
 // I9 は第4部の教示。I7（第3部のブロックの順序は巡回のまま）は変更なし。
+//
+// v0.6.1。栗原さんの判断 AA1（所要時間を約20分、謝礼を72ポイントにする。index.html の同意の画面）、
+// AA4（第2部で 3 回目にも早く動いたときは、やり直さずに記録して先へ進むが、知らせを出す）、
+// AA5（ルール紹介の映像を、課題の操作に合わせたナレーションの場面に差し替える。video/rules-basic.mp4）に合わせた。
 // ==========================
 
 import {
@@ -336,7 +340,7 @@ async function showMessage(title, paragraphs, { mount = null } = {}) {
 }
 
 // 最初の練習の前に、ルール紹介の映像の基本の部分（音の回数を数えて同じ数字の札を取る、最後の音だけ高い）を見せる（v0.6.0、I3）。
-// 映像は majikaruta-reader のルール紹介の映像の場面 s03「音の聞き方」を切り出したもの（config.js の RULES_VIDEO）。
+// 映像は、ルール紹介の映像の場面 s03「音の聞き方」を、課題の操作に合わせて作り直したもの（v0.6.1、AA5。config.js の RULES_VIDEO）。
 // 音を出して自動で再生し、再生が終わるか、参加者が「次へ」を押すと進む。自動の再生が止められたときは、再生のボタンで始めてもらう。
 // 見たかどうかを、セッションの rulesVideo に残す（再生が最後まで進んだか、見た秒数、「次へ」で飛ばしたか）。
 async function runRulesVideo() {
@@ -551,12 +555,17 @@ async function runPart(key, trials) {
 // 第2部の 1 試行を、早く動いたときのやり直しを含めて行う（v0.6.0、I4）。
 // 最後の高い音の予定の時刻より前にカーソルが開始ボタンの四角の外へ出たら、試行のあとに知らせて同じ試行をやり直す。
 // やり直しは PART2_EARLY_MOVE.maxRetries 回までで、その次の回は早く動いてもそのまま記録して先へ進む。
+// その回で早く動いたときは、記録したあとに知らせ（PART2_EARLY_MOVE.finalNotice）を出し、「次へ」で先へ進む（v0.6.1、AA4）。
 // 読み込み直したときは、保存済みのやり直しの記録（文書 ID の末尾が _early1、_early2）の数から続ける。
 async function runPart2Trial(trial, meta) {
   let attempt = 0;
   while (state.savedDocIds.has(`${trial.docId}_early${attempt + 1}`)) attempt++;
   for (;;) {
     const r = await runTrial(trial, meta, { attempt });
+    if (r && r.earlyRecorded) {
+      await showMessage("お知らせ", [PART2_EARLY_MOVE.finalNotice]);
+      return;
+    }
     if (!r || !r.retry) return;
     attempt++;
     await showMessage("やり直し", [
@@ -589,7 +598,8 @@ function scheduleGuide(trial, tones) {
   return () => timers.forEach(clearTimeout);
 }
 
-// 返り値は { retry }。retry が真なら、第2部で早く動いたので、呼び出し側（runPart2Trial）が同じ試行をやり直す。
+// 返り値は { retry, earlyRecorded }。retry が真なら、第2部で早く動いたので、呼び出し側（runPart2Trial）が同じ試行をやり直す。
+// earlyRecorded が真なら、第2部でやり直しの上限のあとの回にも早く動いたので、記録したうえで呼び出し側が知らせを出す（v0.6.1、AA4）。
 // attempt は第2部の同じ試行の何回目か（0 が最初）。第2部以外では 0 のまま。
 async function runTrial(trial, meta, { attempt = 0 } = {}) {
   const board = state.board;
@@ -727,10 +737,15 @@ async function runTrial(trial, meta, { attempt = 0 } = {}) {
   //               軌道の点か札のクリックか）。出ていなければ null。
   //   part2Attempt … 同じ試行の何回目か（0 が最初、1 と 2 がやり直し）。
   //   supersededByRetry … 早く動いたのでやり直した回の記録。文書 ID の末尾に _early1、_early2 を付けて別に残し、分析と完了コードの条件では除ける。
+  //   part2Outcome … "retry"（やり直した回）、"record_early"（やり直しの上限のあとの回にも早く動き、記録して知らせを出した。v0.6.1）、"record"。
   let retry = false;
+  let earlyRecorded = false;
   if (isPart2) {
     const early = earlyLeaveFromStart(recorder.path, board.startButtonRect, tones.lastTonePerf, result.click);
-    retry = part2AttemptDecision({ early: Boolean(early), attempt, maxRetries: PART2_EARLY_MOVE.maxRetries }) === "retry";
+    const outcome = part2AttemptDecision({ early: Boolean(early), attempt, maxRetries: PART2_EARLY_MOVE.maxRetries });
+    retry = outcome === "retry";
+    earlyRecorded = outcome === "record_early";
+    record.part2Outcome = outcome;
     record.earlyMove = early;
     record.earlyMoveDetected = Boolean(early);
     record.part2Attempt = attempt;
@@ -754,7 +769,7 @@ async function runTrial(trial, meta, { attempt = 0 } = {}) {
   if (retry) {
     setTimeout(() => { sendTrial(record).catch((e) => console.warn("送信に失敗しました", e)); }, 0);
     board.clearMarks();
-    return { retry: true };
+    return { retry: true, earlyRecorded: false };
   }
   if (result.timedOut) {
     board.showFeedback("時間切れ", "timeout");
@@ -775,7 +790,7 @@ async function runTrial(trial, meta, { attempt = 0 } = {}) {
   await sleep(feedbackMs);
   board.hideFeedback();
   board.clearMarks();
-  return { retry: false };
+  return { retry: false, earlyRecorded };
 }
 
 // ---------- アンケート ----------
