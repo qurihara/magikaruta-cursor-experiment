@@ -20,19 +20,26 @@
 // 同意の前には何も送信しない（端末の条件で止めた人と二重の参加の人の記録は作らず、Firebase の初期化と再送も同意のあとに行う）。
 // 最後の質問と同意の画面の申告は任意にし、「答えない」を選べるようにした。部と部の間に休憩の画面を置いた。
 // 対面の流れの動きは変えていない。
+//
+// v0.6.0。栗原さんの通しの確認（Y11）のあとの決定 I1〜I9 と、t の水準の変更（1.6 秒をやめて 0.6 秒を足す）に合わせた。
+// 両方の流れで同じに動く。I1 は開始ボタンのそばの案内、I3 は最初の練習の前のルール紹介の映像と第1部の教示、
+// I4 は第2部の早い動きの判定とやり直し、I5 は第3部の教示と動きの見本（demo.js）、I6 は第3部の練習のハイライトの時刻と説明、
+// I9 は第4部の教示。I7（第3部のブロックの順序は巡回のまま）は変更なし。
 // ==========================
 
 import {
   APP_VERSION, GROUPS, MACHINES, INSTRUCTIONS, TIMING, TEST_MODE, ONLINE, AUDIO, ONLINE_AGE_BANDS,
+  PART2_EARLY_MOVE, START_HINTS, PART3_PRACTICE_GUIDE_NOTE, RULES_VIDEO,
 } from "./config.js";
 import {
   parseWid, participantIdFromWid, envProblems, practiceDecision, completionDecision, duplicateDecision,
   restAfter, surveyValue,
 } from "./online.js";
-import { buildPlan, splitPlanByPart, PART_ORDER, candidatesAfterTones } from "./design.js";
+import { buildPlan, splitPlanByPart, PART_ORDER, guideSchedule } from "./design.js";
+import { mountPart3Demo } from "./demo.js";
 import { unlockAudio, setGain, getGain, scheduleTones, stopAllTones, playSoundCheck } from "./audio.js";
 import { Board } from "./board.js";
-import { PointerRecorder, buildTrialRecord } from "./recorder.js";
+import { PointerRecorder, buildTrialRecord, earlyLeaveFromStart, part2AttemptDecision } from "./recorder.js";
 import {
   saveTrialLocal, sendTrial, sendSession, saveSessionLocal, loadSessionLocal,
   loadTrialsForSession, loadAllSessions, loadAllTrials, resendUnsent, uploadEnabled, uploadTargetLabel,
@@ -271,6 +278,8 @@ async function startSession({ participantId, group, machine = "", eventName, onl
     completedTrialCount: saved.length,
     env,
     survey: existing?.survey ?? null,
+    // ルール紹介の映像を見たかどうか（v0.6.0、I3）。読み込み直したときも、前に見た記録を残す。
+    rulesVideo: existing?.rulesVideo ?? null,
     finishedAt: existing?.finishedAt ?? null,
     status: "running",
     // オンラインの流れ（v0.5.0）。mode は "online" か "onsite"。online には作業者ID、申告（ポインタ、音の機器）、ルールの確認の回数が入る。
@@ -315,11 +324,47 @@ async function runIntro() {
 }
 
 // 教示やブロックの知らせを出し、「次へ」を待つ。
-async function showMessage(title, paragraphs) {
+// mount を渡すと、段落のあとに mount(本文の要素) で部品（第3部の動きの見本など）を足し、「次へ」のあとに mount が返した関数で片付ける。
+async function showMessage(title, paragraphs, { mount = null } = {}) {
   $("#message-title").textContent = title;
-  $("#message-body").innerHTML = paragraphs.map((p) => `<p>${p}</p>`).join("");
+  const body = $("#message-body");
+  body.innerHTML = paragraphs.map((p) => `<p>${p}</p>`).join("");
   showScreen("screen-message");
+  const cleanup = mount ? mount(body) : null;
   await waitForClick($("#btn-message-next"));
+  if (typeof cleanup === "function") cleanup();
+}
+
+// 最初の練習の前に、ルール紹介の映像の基本の部分（音の回数を数えて同じ数字の札を取る、最後の音だけ高い）を見せる（v0.6.0、I3）。
+// 映像は majikaruta-reader のルール紹介の映像の場面 s03「音の聞き方」を切り出したもの（config.js の RULES_VIDEO）。
+// 音を出して自動で再生し、再生が終わるか、参加者が「次へ」を押すと進む。自動の再生が止められたときは、再生のボタンで始めてもらう。
+// 見たかどうかを、セッションの rulesVideo に残す（再生が最後まで進んだか、見た秒数、「次へ」で飛ばしたか）。
+async function runRulesVideo() {
+  const video = $("#rules-video");
+  const nextBtn = $("#btn-video-next");
+  const note = $("#video-play-note");
+  showScreen("screen-video");
+  if (!video.getAttribute("src")) video.setAttribute("src", RULES_VIDEO.src);
+  video.currentTime = 0;
+  video.muted = false;
+  note.hidden = true;
+  const shownAt = new Date().toISOString();
+  try { await video.play(); } catch (e) { note.hidden = false; }
+  const how = await new Promise((resolve) => {
+    const onEnded = () => { done("ended"); };
+    const onNext = () => { done("next"); };
+    const done = (v) => {
+      video.removeEventListener("ended", onEnded);
+      nextBtn.removeEventListener("click", onNext);
+      resolve(v);
+    };
+    video.addEventListener("ended", onEnded);
+    nextBtn.addEventListener("click", onNext);
+  });
+  const watchedSec = Math.round((video.currentTime || 0) * 10) / 10;
+  video.pause();
+  state.session.rulesVideo = { src: RULES_VIDEO.src, shownAt, endedAt: new Date().toISOString(), how, watchedSec, endedNaturally: how === "ended" };
+  await saveSessionLocal(state.session);
 }
 
 // ---------- 部とブロックの流れ ----------
@@ -341,6 +386,8 @@ async function runAllParts() {
     const remaining = parts.get(key).filter((t) => !state.savedDocIds.has(t.docId));
     if (remaining.length > 0) {
       if (restPending) { await runRest(restPending); restPending = null; }
+      // 最初の練習の前に、ルール紹介の映像を見せる（v0.6.0、I3）。読み込み直して練習を済ませたあとには出さない。
+      if (key === "practice") await runRulesVideo();
       await showPartInstruction(key, remaining);
       await runPart(key, remaining);
       if (ONLINE_MODE && restAfter(key)) restPending = key;
@@ -435,6 +482,7 @@ function showStop(title, paragraphs) {
 
 async function showPartInstruction(key, remaining) {
   const n = remaining.length;
+  const demo = { mount: (body) => mountPart3Demo(body) };
   switch (key) {
     case "practice":
       return showMessage("練習", [
@@ -447,23 +495,28 @@ async function showPartInstruction(key, remaining) {
         "音の間隔は、まとまりごとに変わります。まとまりの最初に音の間隔をお知らせし、1 回の練習のあと、本番を行います。",
       ]);
     case "part2":
+      // v0.6.0（I4）。開始ボタンの上で待つ教示と、開始ボタンの真ん中あたりを押す案内、早く動いたときのやり直しを知らせる。
       return showMessage("第2部", [
         INSTRUCTIONS.part2,
+        `開始の前に、${START_HINTS.part2}。開始ボタンは、音が鳴っている間も「${START_HINTS.part2Waiting}」の印として画面に残ります。`,
+        `最後の高い音が鳴る前にカーソルが開始ボタンから離れると、その回をやり直します（同じ回のやり直しは ${PART2_EARLY_MOVE.maxRetries} 回までです）。`,
         `音の間隔は ${formatT(remaining[0].t)} です。${n} 回行います。`,
       ]);
     case "part3practice":
+      // v0.6.0（I5）。教示の文を段落に分け、動きの見本を添える。
       return showMessage("第3部", [
-        INSTRUCTIONS.part3,
-        `まず、音の間隔 ${formatT(remaining[0].t)} で ${n} 回の練習を行います。練習では、いま乗るべき札を黄色い枠で示します。`,
-      ]);
+        ...INSTRUCTIONS.part3,
+        `まず、音の間隔 ${formatT(remaining[0].t)} で ${n} 回の練習を行います。練習では、いま乗せるべき札を光らせて示します。`,
+      ], demo);
     case "part3":
       return showMessage("第3部 本番", [
-        INSTRUCTIONS.part3,
-        "音の間隔は、まとまりごとに変わります。まとまりの最初に音の間隔をお知らせし、1 回の練習のあと、本番を行います。",
-      ]);
+        ...INSTRUCTIONS.part3,
+        "音の間隔は、まとまりごとに変わります。まとまりの最初に音の間隔をお知らせし、1 回の練習のあと、本番を行います。本番では札は光りません。",
+      ], demo);
     case "part4":
+      // v0.6.0（I9）。
       return showMessage("第4部", [
-        INSTRUCTIONS.part4,
+        ...INSTRUCTIONS.part4,
         `${n} 回行います。`,
       ]);
     default:
@@ -489,46 +542,71 @@ async function runPart(key, trials) {
     }
     for (const trial of blockTrials) {
       if (state.abort) return;
-      await runTrial(trial, { key, totalBlocks, blockTotal: blockTrials.length });
+      if (key === "part2") await runPart2Trial(trial, { key, totalBlocks, blockTotal: blockTrials.length });
+      else await runTrial(trial, { key, totalBlocks, blockTotal: blockTrials.length });
     }
+  }
+}
+
+// 第2部の 1 試行を、早く動いたときのやり直しを含めて行う（v0.6.0、I4）。
+// 最後の高い音の予定の時刻より前にカーソルが開始ボタンの四角の外へ出たら、試行のあとに知らせて同じ試行をやり直す。
+// やり直しは PART2_EARLY_MOVE.maxRetries 回までで、その次の回は早く動いてもそのまま記録して先へ進む。
+// 読み込み直したときは、保存済みのやり直しの記録（文書 ID の末尾が _early1、_early2）の数から続ける。
+async function runPart2Trial(trial, meta) {
+  let attempt = 0;
+  while (state.savedDocIds.has(`${trial.docId}_early${attempt + 1}`)) attempt++;
+  for (;;) {
+    const r = await runTrial(trial, meta, { attempt });
+    if (!r || !r.retry) return;
+    attempt++;
+    await showMessage("やり直し", [
+      PART2_EARLY_MOVE.notice,
+      `同じ回をもう一度行います（やり直し ${attempt} / ${PART2_EARLY_MOVE.maxRetries} 回目）。開始を押したら、カーソルを開始ボタンの上に置いたまま、最後の高い音を待ってください。`,
+    ]);
   }
 }
 
 // ---------- 1試行 ----------
 
-function progressText(trial, { key, totalBlocks }) {
+function progressText(trial, { key, totalBlocks }, attempt = 0) {
   const partLabel = PART_TITLES[key] || key;
   const blockLabel = totalBlocks > 1 ? `　まとまり ${trial.blockIndex + 1}/${totalBlocks}` : "";
   const kind = trial.isPractice ? (trial.extraPractice ? `練習 ${trial.trialIndex}` : "練習") : `試行 ${trial.trialIndex}`;
-  return `${partLabel}${blockLabel}　${kind}　t = ${trial.t} s　配置 ${trial.layoutId}${TEST ? `　読み ${trial.target}` : ""}`;
+  const retry = attempt > 0 ? `（やり直し ${attempt}）` : "";
+  return `${partLabel}${blockLabel}　${kind}${retry}　t = ${trial.t} s　配置 ${trial.layoutId}${TEST ? `　読み ${trial.target}` : ""}`;
 }
 
 // 第3部の練習で、いま乗るべき札（候補のうち最小の値）を音に合わせて示す。
+// 最初の音の前に最小の札を光らせ、k 回目の音の鳴り終わり（鳴り始めから音の間隔の半分）に次の札へ移す（v0.6.0、I6。
+// v0.5.4 までは音の鳴り始めに移していた）。時刻は design.js の guideSchedule で決め、第3部の動きの見本（demo.js）と同じ規則にする。
 function scheduleGuide(trial, tones) {
-  const values = trial.rows.flat();
   const timers = [];
-  const show = (k) => {
-    const cands = candidatesAfterTones(values, k, trial.target);
-    state.board.setGuide(cands.length > 0 ? Math.min(...cands) : null);
-  };
-  show(0);
-  tones.toneTimesPerf.forEach((tt, i) => {
-    const delay = Math.max(0, tt - performance.now());
-    timers.push(setTimeout(() => show(i + 1), delay));
-  });
+  const steps = guideSchedule({ values: trial.rows.flat(), target: trial.target, toneTimesPerf: tones.toneTimesPerf, t: trial.t });
+  for (const step of steps) {
+    if (step.atPerf === null) { state.board.setGuide(step.value); continue; }
+    timers.push(setTimeout(() => state.board.setGuide(step.value), Math.max(0, step.atPerf - performance.now())));
+  }
   return () => timers.forEach(clearTimeout);
 }
 
-async function runTrial(trial, meta) {
+// 返り値は { retry }。retry が真なら、第2部で早く動いたので、呼び出し側（runPart2Trial）が同じ試行をやり直す。
+// attempt は第2部の同じ試行の何回目か（0 が最初）。第2部以外では 0 のまま。
+async function runTrial(trial, meta, { attempt = 0 } = {}) {
   const board = state.board;
   const recorder = state.recorder;
   const screenEl = $("#screen-trial");
+  const isPart2 = trial.part === "part2";
   state.current = trial;
 
   showScreen("screen-trial");
-  $("#trial-progress").textContent = progressText(trial, meta);
+  $("#trial-progress").textContent = progressText(trial, meta, attempt);
   board.clearMarks();
   board.render(trial.rows);
+  board.setStartWaiting(false);
+  // 開始ボタンのそばの案内（v0.6.0、I1）。第2部では、開始ボタンの真ん中あたりを押す案内（I4）を添える。
+  board.setStartHint(isPart2 ? [START_HINTS.all, START_HINTS.part2] : [START_HINTS.all]);
+  // 第3部の練習では、ハイライトの説明を出す（v0.6.0、I6）。
+  board.setPracticeNote(trial.part === "part3practice" ? PART3_PRACTICE_GUIDE_NOTE : "");
 
   // 0. タブが背面にある間は、開始のボタンを出さずに待つ（v0.5.0）。
   await waitUntilVisible();
@@ -550,7 +628,13 @@ async function runTrial(trial, meta) {
     timeStamp: startEv.timeStamp,
     isoTime: new Date().toISOString(),   // Date を読むのは試行の中でここだけ
   };
-  board.showStartButton(false);
+  board.setStartHint([]);
+  if (isPart2) {
+    // 第2部では、試行のあいだも開始ボタンを「ここで待つ」場所として残す（v0.6.0、I4）。札の見た目は変えない。
+    board.setStartWaiting(true, START_HINTS.part2Waiting);
+  } else {
+    board.showStartButton(false);
+  }
   board.measure();
   // 試行の開始の時点の、タブの背面とフォーカスの喪失の累計（v0.5.0）。
   const focusAtStart = { ...focusLog, hasFocus: document.hasFocus(), visible: document.visibilityState === "visible" };
@@ -603,6 +687,8 @@ async function runTrial(trial, meta) {
   clearGuide();
   stopAllTones();
   board.setGuide(null);
+  board.setPracticeNote("");
+  if (isPart2) { board.setStartWaiting(false); board.showStartButton(false); }
 
   // 5. 記録を組み立てて保存する。
   const record = buildTrialRecord({
@@ -636,18 +722,40 @@ async function runTrial(trial, meta) {
   };
   record.mode = ONLINE_MODE ? "online" : "onsite";
   record.wid = WID;
+  // 第2部の早い動き（v0.6.0、I4）。
+  //   earlyMove … 最後の高い音の予定の時刻より前に、カーソルが開始ボタンの四角の外へ出た最初の点（perf、x、y、最後の音までの残り ms、
+  //               軌道の点か札のクリックか）。出ていなければ null。
+  //   part2Attempt … 同じ試行の何回目か（0 が最初、1 と 2 がやり直し）。
+  //   supersededByRetry … 早く動いたのでやり直した回の記録。文書 ID の末尾に _early1、_early2 を付けて別に残し、分析と完了コードの条件では除ける。
+  let retry = false;
+  if (isPart2) {
+    const early = earlyLeaveFromStart(recorder.path, board.startButtonRect, tones.lastTonePerf, result.click);
+    retry = part2AttemptDecision({ early: Boolean(early), attempt, maxRetries: PART2_EARLY_MOVE.maxRetries }) === "retry";
+    record.earlyMove = early;
+    record.earlyMoveDetected = Boolean(early);
+    record.part2Attempt = attempt;
+    record.part2MaxRetries = PART2_EARLY_MOVE.maxRetries;
+    record.supersededByRetry = retry;
+    record.planDocId = trial.docId;
+    if (retry) record.docId = `${trial.docId}_early${attempt + 1}`;
+  }
   for (const pt of [record.pointerTypeStart, record.pointerTypeClick]) {
     if (pt) state.session.pointerTypes[pt] = (state.session.pointerTypes[pt] || 0) + 1;
   }
   await saveTrialLocal(record);
-  state.savedDocIds.add(trial.docId);
+  state.savedDocIds.add(record.docId);
   state.session.completedTrialCount = state.savedDocIds.size;
-  state.session.lastTrialDocId = trial.docId;
+  state.session.lastTrialDocId = record.docId;
   await saveSessionLocal(state.session);
   window.__collectionB.lastRecord = record;
 
-  // 6. 結果を即座に表示する。
+  // 6. 結果を即座に表示する。第2部で早く動いてやり直す回は、正誤を出さずに、呼び出し側がやり直しの知らせを出す。
   const feedbackMs = TEST ? TEST_MODE.feedbackMs : TIMING.feedbackMs;
+  if (retry) {
+    setTimeout(() => { sendTrial(record).catch((e) => console.warn("送信に失敗しました", e)); }, 0);
+    board.clearMarks();
+    return { retry: true };
+  }
   if (result.timedOut) {
     board.showFeedback("時間切れ", "timeout");
     board.markResult(null, trial.target);
@@ -667,6 +775,7 @@ async function runTrial(trial, meta) {
   await sleep(feedbackMs);
   board.hideFeedback();
   board.clearMarks();
+  return { retry: false };
 }
 
 // ---------- アンケート ----------

@@ -11,9 +11,12 @@ import assert from "node:assert/strict";
 import {
   mulberry32, hashSeed, williamsSquare, blockOrderForParticipant,
   buildPlan, splitPlanByPart, assignTargets, layoutMax, layoutValues,
-  isDeterminedAfterTones, candidatesAfterTones,
+  isDeterminedAfterTones, candidatesAfterTones, guideSchedule,
 } from "../js/design.js";
-import { T_LEVELS, LAYOUTS, TRIALS_PER_BLOCK, MAX_TARGET_TRIALS_PER_BLOCK, TEST_MODE } from "../js/config.js";
+import {
+  T_LEVELS, LAYOUTS, TRIALS_PER_BLOCK, MAX_TARGET_TRIALS_PER_BLOCK, TEST_MODE, PART3_PRACTICE_T, PART4_T_LEVELS,
+  INITIAL_PRACTICE_T, PART3_DEMO,
+} from "../js/config.js";
 
 const PIDS = Array.from({ length: 30 }, (_, i) => i + 1);
 
@@ -197,7 +200,50 @@ test("練習の試行数と t が仕様どおり", () => {
   assert.equal(parts.get("practice").length, 5);
   assert.ok(parts.get("practice").every((t) => t.t === 0.4 && t.isPractice));
   assert.equal(parts.get("part3practice").length, 3);
-  assert.ok(parts.get("part3practice").every((t) => t.t === 1.6 && t.isPractice));
+  assert.ok(parts.get("part3practice").every((t) => t.t === 0.8 && t.isPractice));
+});
+
+// ---------- v0.6.0（栗原さんの通しの確認 Y11 のあとの決定） ----------
+
+test("t の5水準は 0.1、0.2、0.4、0.6、0.8 秒で、1.6 秒を使わない", () => {
+  assert.deepEqual(T_LEVELS, [0.1, 0.2, 0.4, 0.6, 0.8]);
+  assert.equal(PART3_PRACTICE_T, 0.8);
+  assert.equal(INITIAL_PRACTICE_T, 0.4);
+  assert.deepEqual(PART4_T_LEVELS, [0.4, 0.8]);
+  for (const pid of PIDS) {
+    const plan = buildPlan({ participantId: pid });
+    assert.ok(plan.every((t) => t.t !== 1.6), `pid ${pid}`);
+    const ts = new Set(splitPlanByPart(plan).get("part1").map((t) => t.t));
+    assert.deepEqual([...ts].sort((a, b) => a - b), [0.1, 0.2, 0.4, 0.6, 0.8]);
+  }
+});
+
+test("ハイライトは最初の音の前に最小の札を示し、各音の鳴り終わり（鳴り始め + t/2）に次の札へ移る", () => {
+  // 第3部の動きの見本と同じ場：札 5 6 7 8、7 が読まれる、t = 0.8 秒。音の鳴り始めを 1000 ms から 800 ms ごととする。
+  const t = 0.8;
+  const toneTimesPerf = Array.from({ length: 7 }, (_, i) => 1000 + i * 800);
+  const steps = guideSchedule({ values: [5, 6, 7, 8], target: 7, toneTimesPerf, t });
+  assert.equal(steps.length, 8);
+  assert.deepEqual(steps[0], { k: 0, atPerf: null, value: 5 });
+  for (let k = 1; k <= 7; k++) {
+    assert.equal(steps[k].k, k);
+    assert.equal(steps[k].atPerf, toneTimesPerf[k - 1] + 400, `k=${k} は鳴り始めの 400 ms あと`);
+  }
+  // 1〜4 回目のあとは 5 のまま、5 回目のあと 6、6 回目のあと 7、7 回目（最後の高い音）のあとは読まれた 7。
+  assert.deepEqual(steps.map((s) => s.value), [5, 5, 5, 5, 5, 6, 7, 7]);
+  // 見本の設定がこの場と同じ。
+  assert.deepEqual(PART3_DEMO, { rows: [[5, 6, 7, 8]], target: 7, t: 0.8 });
+});
+
+test("ハイライトの時刻は t に比例する（t = 0.1 秒なら鳴り始めの 50 ms あと）", () => {
+  const steps = guideSchedule({ values: [2, 5, 8, 11], target: 11, toneTimesPerf: [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000], t: 0.1 });
+  assert.equal(steps[1].atPerf, 50);
+  assert.equal(steps[11].atPerf, 1050);
+  // 2 回目のあと 5、5 回目のあと 8、8 回目のあと 11（確定）。
+  assert.equal(steps[1].value, 2);
+  assert.equal(steps[2].value, 5);
+  assert.equal(steps[5].value, 8);
+  assert.equal(steps[8].value, 11);
 });
 
 test("全体の試行数は 5 + 45 + 8 + 3 + 45 + 8 = 114", () => {

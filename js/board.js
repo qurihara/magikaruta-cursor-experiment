@@ -68,6 +68,20 @@ export class Board {
     this.startButton.style.top = `${g.boardHeight + BOARD.startButtonOffset}px`;
     stageEl.appendChild(this.startButton);
 
+    // 開始ボタンのそばの案内（v0.6.0、I1 と I4）。盤面の下端と開始ボタンの間のすき間（200px）の下寄りに置く。
+    this.hintEl = document.createElement("div");
+    this.hintEl.className = "start-hint";
+    this.hintEl.style.width = `${g.boardWidth}px`;
+    this.hintEl.style.top = `${g.boardHeight + BOARD.startButtonOffset - 76}px`;
+    stageEl.appendChild(this.hintEl);
+
+    // 第3部の練習の目印の説明（v0.6.0、I6）。同じすき間の上寄りに置き、札には重ねない。
+    this.noteEl = document.createElement("div");
+    this.noteEl.className = "practice-note";
+    this.noteEl.style.width = `${g.boardWidth}px`;
+    this.noteEl.style.top = `${g.boardHeight + 16}px`;
+    stageEl.appendChild(this.noteEl);
+
     this.feedbackEl = document.createElement("div");
     this.feedbackEl.className = "feedback";
     stageEl.appendChild(this.feedbackEl);
@@ -119,6 +133,30 @@ export class Board {
 
   showStartButton(show) {
     this.startButton.style.visibility = show ? "visible" : "hidden";
+  }
+
+  // 第2部で、試行のあいだも開始ボタンを「ここで待つ」場所として残す（v0.6.0、I4）。
+  // waiting が真なら、ボタンの文字を label にして見た目を待つ場所の形に替え、偽なら「開始」に戻す。
+  setStartWaiting(waiting, label = "ここで待つ") {
+    this.startButton.classList.toggle("waiting", waiting);
+    this.startButton.textContent = waiting ? label : "開始";
+  }
+
+  // 開始ボタンのそばの案内を出す。lines は文の並び。空の並びなら消す。
+  setStartHint(lines) {
+    this.hintEl.innerHTML = "";
+    for (const line of lines || []) {
+      const p = document.createElement("div");
+      p.textContent = line;
+      this.hintEl.appendChild(p);
+    }
+    this.hintEl.classList.toggle("show", Boolean(lines && lines.length));
+  }
+
+  // 第3部の練習の目印の説明を出す。text が空なら消す。
+  setPracticeNote(text) {
+    this.noteEl.textContent = text || "";
+    this.noteEl.classList.toggle("show", Boolean(text));
   }
 
   // 第3部の練習で「いま乗るべき札」を示す。value が null なら消す。

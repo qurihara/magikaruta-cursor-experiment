@@ -6,7 +6,7 @@
   <title>まじかるた 収集B</title>
   <link rel="stylesheet" href="style.css">
   <!-- Firebase の設定。送信先は js/upload-config.js で選ぶ（v0.3.0 から既定は Firebase）。?v= は、ブラウザに残った古い設定のファイルを使わせないための版の印で、設定を変えたら上げる。 -->
-  <script src="js/firebase-config.js?v=0.5.4"></script>
+  <script src="js/firebase-config.js?v=0.6.0"></script>
 </head>
 <body>
   <div id="app">
@@ -192,6 +192,21 @@
       </div>
     </section>
 
+    <!-- ルール紹介の映像の基本の部分（v0.6.0、I3）。最初の練習の前に、オンラインの流れと対面の流れの両方で見せる。
+         再生が終わるか、参加者が「次へ」を押すと進む（main.js の runRulesVideo）。 -->
+    <section id="screen-video" class="screen">
+      <h1>遊び方の基本</h1>
+      <div class="instruction">
+        <p>はじめに、短い映像（約 23 秒、音が出ます）で、電子音の聞き方を見てください。</p>
+      </div>
+      <div class="video-wrap">
+        <video id="rules-video" class="rules-video" playsinline controls preload="auto" width="720" height="405"></video>
+      </div>
+      <p id="video-play-note" class="notice" hidden>映像が自動で始まらないときは、映像の再生のボタンを押してください。</p>
+      <p class="muted">映像の中の「読む」のボタンと準備の音は、スマートフォンの読み上げアプリのものです。この課題では、画面の「開始」のボタンを押すと、少し待ってから電子音が始まります。</p>
+      <div class="row"><button type="button" id="btn-video-next" class="primary">次へ</button></div>
+    </section>
+
     <!-- 教示やブロックの知らせに使う汎用の画面 -->
     <section id="screen-message" class="screen">
       <h1 id="message-title"></h1>
@@ -264,6 +279,6 @@
   <div id="version-label" class="version-label"></div>
   <div id="test-mode-label" class="test-mode-label" hidden>テストモード</div>
 
-  <script type="module" src="js/main.js?v=0.5.4"></script>
+  <script type="module" src="js/main.js?v=0.6.0"></script>
 </body>
 </html>

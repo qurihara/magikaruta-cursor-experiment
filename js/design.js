@@ -376,3 +376,24 @@ export function isDeterminedAfterTones(values, target, k) {
   if (k >= target) return true;
   return candidatesAfterTones(values, k, target).length === 1;
 }
+
+// ---------- 第3部の練習のハイライトと動きの見本の時刻（v0.6.0、I5 と I6） ----------
+
+// いま乗せるべき札（候補のうち最小の値）が切り替わる時刻の並びを返す。
+// 返り値は [{ k, atPerf, value }, ...]。最初の要素は k = 0（最初の音の前）で、atPerf は null（すぐに示す）。
+// k 回目（1 から）の要素は、k 回目の音の鳴り終わり、つまり k 回目の音の鳴り始めから音の間隔の半分（t / 2 秒）が過ぎた時点で、
+// k 回鳴った時点の候補のうち最小の値の札に移る。v0.5.4 までは音の鳴り始めに移していたが、
+// 栗原さんの通しの確認（Y11）のあとの決定 I6 で、鳴り終わりに遅らせた。最後の高い音のあとは、読まれた札を示す。
+// toneTimesPerf は各音の鳴り始めの時刻（ミリ秒）、t は音の間隔（秒）。
+export function guideSchedule({ values, target, toneTimesPerf, t }) {
+  const minOf = (k) => {
+    const cands = candidatesAfterTones(values, k, k === 0 ? undefined : target);
+    return cands.length > 0 ? Math.min(...cands) : null;
+  };
+  const halfMs = (t * 1000) / 2;
+  const out = [{ k: 0, atPerf: null, value: minOf(0) }];
+  toneTimesPerf.forEach((tt, i) => {
+    out.push({ k: i + 1, atPerf: tt + halfMs, value: minOf(i + 1) });
+  });
+  return out;
+}

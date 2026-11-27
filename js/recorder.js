@@ -237,3 +237,36 @@ export function buildTrialRecord({ trial, session, start, tones, waitMs, click, 
     sent: false,
   };
 }
+
+// ---------- 第2部の早い動きの判定（v0.6.0、I4） ----------
+
+// 点 (x, y) が矩形 rect（left, top, right, bottom）の中（境界を含む）にあるか。
+export function insideRect(rect, x, y) {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+// 最後の高い音の予定の時刻（lastTonePerf）より前に、カーソルが開始ボタンの四角（rect）の外へ出たかを調べる。
+// 軌道（path）の点と、札のクリック（click、{ x, y, perf } または null）を時刻の順に見て、
+// lastTonePerf より前で rect の外にある最初の点を返す。返り値は { perf, x, y, msBeforeLastTone, source } か、出ていなければ null。
+// source は "path"（軌道の点）か "click"（札のクリック）。
+export function earlyLeaveFromStart(path, rect, lastTonePerf, click = null) {
+  if (!rect || lastTonePerf === null || lastTonePerf === undefined) return null;
+  const points = [];
+  for (let i = 0; i < path.t.length; i++) points.push({ x: path.x[i], y: path.y[i], perf: path.t[i], source: "path" });
+  if (click) points.push({ x: click.x, y: click.y, perf: click.perf, source: "click" });
+  points.sort((a, b) => a.perf - b.perf);
+  for (const p of points) {
+    if (p.perf >= lastTonePerf) break;
+    if (!insideRect(rect, p.x, p.y)) {
+      return { perf: p.perf, x: p.x, y: p.y, msBeforeLastTone: lastTonePerf - p.perf, source: p.source };
+    }
+  }
+  return null;
+}
+
+// 第2部の 1 回の試行のあとで、やり直すか、記録して先へ進むかを決める。
+// attempt はその試行の何回目か（0 が最初、1 が 1 回目のやり直し）。早く動いて、まだやり直しが maxRetries 回に達していなければ "retry"。
+// 早く動かなかったとき、または早く動いてもやり直しが上限に達したとき（maxRetries = 2 なら 3 回目）は "record"。
+export function part2AttemptDecision({ early, attempt, maxRetries }) {
+  return early && attempt < maxRetries ? "retry" : "record";
+}

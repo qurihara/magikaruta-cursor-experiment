@@ -5,7 +5,8 @@ import {
   parseWid, participantIdFromWid, isMobileEnv, envProblems, practiceDecision, completionDecision, duplicateDecision,
   restAfter, surveyValue,
 } from "../js/online.js";
-import { ONLINE, ONLINE_AGE_BANDS, APP_VERSION } from "../js/config.js";
+import { ONLINE, ONLINE_AGE_BANDS, APP_VERSION, INSTRUCTIONS, START_HINTS, PART3_PRACTICE_GUIDE_NOTE, RULES_VIDEO } from "../js/config.js";
+import { existsSync, statSync } from "node:fs";
 import { readFileSync } from "node:fs";
 
 const P = (q) => new URLSearchParams(q);
@@ -146,4 +147,38 @@ test("終了の画面は完了コードを「選んで」と案内し、「入�
   const main = read("../js/main.js");
   assert.doesNotMatch(main, /数字を入力してください|画面に入力してください/);
   assert.match(main, /1 桁ずつ選んでください/);
+});
+
+// ---------- v0.6.0（栗原さんの通しの確認 Y11 のあとの決定） ----------
+
+test("第2部で早く動いてやり直した回の記録は、完了コードの条件で数えない", () => {
+  const sup = { isPractice: false, timedOut: false, supersededByRetry: true };
+  const records = [...Array(7).fill(0).map(() => main(false)), ...Array(3).fill(0).map(() => main(true))];
+  const d = completionDecision([...records, sup, sup], { minRatio: 0.7 });
+  assert.equal(d.total, 10);
+  assert.equal(d.answered, 7);
+});
+
+test("教示の文が決定のとおり（I1、I3、I4、I5、I6、I8、I9）", () => {
+  assert.equal(START_HINTS.all, "札の配置を覚えたら、開始を押してください");
+  assert.equal(START_HINTS.part2, "開始ボタンの真ん中あたりを押してください");
+  assert.match(INSTRUCTIONS.part1, /正しい札が分かったら、最後の高い音を待たずにクリックしてもかまいません。$/);
+  assert.equal(INSTRUCTIONS.part2, "開始を押したら、カーソルを開始ボタンの上に置いたまま待ち、最後の高い音が聞こえたら札へ動かしてください。");
+  assert.equal(INSTRUCTIONS.part3[0], "第3部では、次の動き方を試していただきます。");
+  assert.equal(INSTRUCTIONS.part3[1], "開始を押したら、最初の音が鳴る前から、いちばん小さい数字の札の上で待ってかまいません。");
+  assert.match(INSTRUCTIONS.part3[2], /^1\. /);
+  assert.match(INSTRUCTIONS.part3[3], /^2\. /);
+  assert.match(INSTRUCTIONS.part3[4], /^3\. /);
+  assert.equal(INSTRUCTIONS.part3.length, 6);
+  assert.equal(INSTRUCTIONS.part4.join(""), "ここからは、どの動き方でもかまいません。第2部のように最後の高い音を聞いてから動いても、第3部のように候補の札の上で待ちながら動いても、それ以外の動き方でもかまいません。正しい札を、できるだけ早くクリックしてください。正しい札が分かったら、最後の高い音を待たずにクリックしてもかまいません。");
+  assert.equal(PART3_PRACTICE_GUIDE_NOTE, "練習の目印：いま乗せるべき札を光らせています。光っている札にカーソルを移してください（本番では光りません）");
+});
+
+test("ルール紹介の映像のファイルがあり、GitHub Pages で配信できる大きさ（5MB 未満）で、映像の画面が index.html にある", () => {
+  const f = new URL("../" + RULES_VIDEO.src, import.meta.url);
+  assert.ok(existsSync(f));
+  assert.ok(statSync(f).size < 5 * 1024 * 1024);
+  const html = read("../index.html");
+  assert.match(html, /<section id="screen-video" class="screen">/);
+  assert.match(html, /id="btn-video-next"/);
 });

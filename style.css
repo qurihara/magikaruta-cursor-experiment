@@ -173,3 +173,38 @@ input[type="number"], input[type="text"], select {
 .consent-doc ul { padding-left: 1.4em; margin: 4px 0; }
 .consent-box { background: #fffbe6; }
 .consent-box label { display: block; font-weight: 700; }
+
+/* v0.6.0：開始ボタンのそばの案内（I1、I4）、第2部の「ここで待つ」の開始ボタン（I4）、第3部の練習の目印の説明（I6） */
+.start-hint, .practice-note {
+  position: absolute; left: 0; text-align: center; pointer-events: none;
+  opacity: 0; font-size: 16px; line-height: 1.5;
+}
+.start-hint.show, .practice-note.show { opacity: 1; }
+.start-hint { color: #333; font-weight: 700; }
+.practice-note { color: #6b4e00; background: #fff6d6; border: 1px solid #e0c36a; border-radius: 6px; padding: 4px 10px; }
+.practice-note:not(.show) { visibility: hidden; }
+.start-button.waiting { border-style: dashed; background: #f3f3f3; color: #555; cursor: default; }
+
+/* ルール紹介の映像の画面（I3） */
+.video-wrap { max-width: 720px; }
+.rules-video { width: 100%; height: auto; background: #000; border-radius: 6px; display: block; }
+
+/* 第3部の動きの見本（I5） */
+.demo { margin: 16px 0; padding: 12px 16px; background: #fff; border: 1px solid #ccc; border-radius: 8px; max-width: 720px; }
+.demo-title { font-size: 0.95rem; color: var(--muted); margin-bottom: 8px; }
+.demo-board { position: relative; margin: 8px auto; }
+.demo-card {
+  position: absolute; top: 0; display: flex; align-items: center; justify-content: center;
+  background: var(--card-bg); border: 2px solid var(--card-border); border-radius: 4px;
+  font-size: 34px; font-weight: 700; color: #222; box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  transition: background 0.1s;
+}
+.demo-card.hover { background: #fff3c4; }
+.demo-card.clicked { background: #e4f3ea; border-color: var(--accent); }
+.demo-cursor { position: absolute; left: 0; top: 0; width: 22px; height: 30px; transition: left 0.18s ease-out, top 0.18s ease-out; pointer-events: none; }
+.demo-cursor svg { position: relative; z-index: 2; }
+.demo-click-ring { position: absolute; left: -12px; top: -12px; width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--danger); opacity: 0; z-index: 1; }
+.demo-cursor.clicking .demo-click-ring { animation: demo-click 0.6s ease-out 2; }
+@keyframes demo-click { 0% { opacity: 1; transform: scale(0.4); } 100% { opacity: 0; transform: scale(1.6); } }
+.demo-count { text-align: center; font-weight: 700; font-size: 1.05rem; }
+.demo-status { text-align: center; min-height: 3.2em; font-size: 1rem; }

@@ -57,8 +57,9 @@ export function practiceDecision(records, { planned, need = ONLINE.practicePassC
 
 // 本試行の記録の並びから、完了コードを出すかを決める。
 // 返り値は { status, answered, total, ratio }。status は "finished" か "incomplete"。
+// 第2部で早く動いてやり直した回の記録（supersededByRetry が真、v0.6.0）は、同じ試行のやり直しの記録が別にあるので数えない。
 export function completionDecision(records, { minRatio = ONLINE.minAnsweredRatio } = {}) {
-  const main = records.filter((r) => !r.isPractice);
+  const main = records.filter((r) => !r.isPractice && !r.supersededByRetry);
   const total = main.length;
   const answered = main.filter((r) => !r.timedOut).length;
   const ratio = total === 0 ? 0 : answered / total;

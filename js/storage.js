@@ -390,6 +390,12 @@ export const TRIAL_CSV_COLUMNS = [
   ["pointer_type_click", (r) => r.pointerTypeClick ?? ""],
   ["hidden_during_trial", (r) => r.focus?.hiddenDuringTrial ?? ""],
   ["blur_during_trial", (r) => r.focus?.blurDuringTrial ?? ""],
+  // v0.6.0 で足した列（第2部の早い動きの判定とやり直し、I4）。第2部以外の試行では空。
+  ["early_move", (r) => (r.earlyMoveDetected === undefined ? "" : r.earlyMoveDetected)],
+  ["early_move_ms_before_last_tone", (r) => r.earlyMove?.msBeforeLastTone ?? ""],
+  ["part2_attempt", (r) => r.part2Attempt ?? ""],
+  ["superseded_by_retry", (r) => (r.supersededByRetry === undefined ? "" : r.supersededByRetry)],
+  ["plan_doc_id", (r) => r.planDocId ?? ""],
   ["movement_onset_perf", (r) => r.derived?.movementOnsetPerf],
   ["movement_onset_ms_from_first_tone", (r) => r.derived?.movementOnsetMsFromFirstTone],
   ["card_at_last_tone", (r) => r.derived?.cardAtLastTone],
